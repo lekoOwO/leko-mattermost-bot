@@ -136,6 +136,7 @@ async fn start_server(state: Arc<RwLock<AppState>>, addr: &str) -> Result<()> {
         .and(warp::path("dialog"))
         .and(warp::path("submit"))
         .and(warp::path::end())
+        .and(warp::query::<std::collections::HashMap<String, String>>())
         .and(warp::body::json())
         .and(with_state(state.clone()))
         .and_then(handle_dialog_submission);
@@ -186,6 +187,7 @@ async fn handle_sticker_command(
 ) -> Result<impl warp::Reply, warp::Rejection> {
     info!("收到 /sticker 指令");
     info!("請求參數: {:?}", form.keys().collect::<Vec<_>>());
+    info!("完整表單內容: {:?}", form);
 
     // 驗證 slash command token
     let app_state = state.read().await;
@@ -217,6 +219,7 @@ async fn handle_sticker_command(
     let text = form.get("text").cloned().unwrap_or_default();
     let user_name = form.get("user_name").cloned().unwrap_or_default();
     let user_id = form.get("user_id").cloned().unwrap_or_default();
+    let response_url = form.get("response_url").cloned().unwrap_or_default();
 
     info!("trigger_id: {}", trigger_id);
     info!("搜尋關鍵字: '{}', 使用者: {}", text, user_name);
@@ -271,28 +274,31 @@ async fn handle_sticker_command(
     .collect();
 
     // 建立對話框
+    // 在 callback URL 中加入 query parameters 來傳遞資訊
     let callback_url = app_state
         .config
         .mattermost
         .bot_callback_url
         .as_ref()
-        .map(|url| format!("{}/dialog/submit", url.trim_end_matches('/')))
+        .map(|url| {
+            let base = url.trim_end_matches('/');
+            // URL encode 參數
+            let encoded_response_url = urlencoding::encode(&response_url);
+            let encoded_user_name = urlencoding::encode(&user_name);
+            format!(
+                "{}/dialog/submit?response_url={}&user_name={}&user_id={}",
+                base, encoded_response_url, encoded_user_name, user_id
+            )
+        })
         .unwrap_or_else(|| "http://localhost/dialog/submit".to_string());
 
     let category_options_len = category_options.len();
     let sticker_options_len = sticker_options.len();
 
-    // 將使用者資訊編碼到 state 中
-    let user_state = serde_json::json!({
-        "user_name": user_name,
-        "user_id": user_id,
-    })
-    .to_string();
-
     let dialog = Dialog {
         trigger_id,
         url: callback_url.clone(),
-        state: Some(user_state),
+        state: None,
         dialog: DialogDefinition {
             callback_id: "sticker_select".to_string(),
             title: "選擇貼圖".to_string(),
@@ -350,36 +356,37 @@ async fn handle_sticker_command(
 }
 
 async fn handle_dialog_submission(
+    query: std::collections::HashMap<String, String>,
     submission: mattermost::DialogSubmission,
     state: Arc<RwLock<AppState>>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     info!("收到對話框提交: {:?}", submission.callback_id);
+    info!("Query 參數: {:?}", query);
 
     if submission.callback_id != "sticker_select" {
         return Ok(warp::reply::json(&serde_json::json!({})));
     }
 
-    // 解析使用者資訊
-    let (user_name, user_id) = if let Some(state_str) = &submission.state {
-        if let Ok(state_json) = serde_json::from_str::<serde_json::Value>(state_str) {
-            let user_name = state_json
-                .get("user_name")
-                .and_then(|v| v.as_str())
-                .unwrap_or("Unknown")
-                .to_string();
-            let user_id = state_json
-                .get("user_id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            (user_name, user_id)
-        } else {
-            ("Unknown".to_string(), String::new())
-        }
-    } else {
-        ("Unknown".to_string(), String::new())
-    };
+    // 從 query 參數中取得資訊
+    let user_name = query
+        .get("user_name")
+        .cloned()
+        .unwrap_or_else(|| "Unknown".to_string());
+    let user_id = query
+        .get("user_id")
+        .cloned()
+        .unwrap_or_else(|| String::new());
+    let response_url = query
+        .get("response_url")
+        .cloned()
+        .unwrap_or_else(|| String::new());
 
+    info!(
+        "從 query 解析 - user_name: {}, user_id: {}, response_url: {}",
+        user_name, user_id, response_url
+    );
+
+    let app_state = state.read().await;
     let sticker_index = submission
         .submission
         .get("sticker_id")
@@ -387,28 +394,33 @@ async fn handle_dialog_submission(
         .and_then(|s| s.parse::<usize>().ok())
         .unwrap_or(0);
 
-    let app_state = state.read().await;
-
     // 找到對應的貼圖
     if let Some(sticker) = app_state.sticker_database.get_by_index(sticker_index) {
-        // 發送貼圖訊息，使用觸發指令的使用者身份
-        let props = serde_json::json!({
-            "override_username": user_name,
-            "override_icon_url": format!("{}/api/v4/users/{}/image",
+        // 使用 response_url 發送訊息（保留 thread 上下文）
+        let response_payload = serde_json::json!({
+            "response_type": "in_channel",
+            "text": format!("![sticker]({})", sticker.image_url),
+            "username": user_name,
+            "icon_url": format!("{}/api/v4/users/{}/image",
                 app_state.config.mattermost.url, user_id),
         });
 
-        let post = Post {
-            channel_id: submission.channel_id.clone(),
-            message: format!("![sticker]({})", sticker.image_url),
-            root_id: None,
-            props: Some(props),
-        };
+        info!("準備透過 response_url 發送貼圖");
 
-        if let Err(e) = app_state.mattermost_client.create_post(&post).await {
-            error!("發送貼圖失敗: {}", e);
+        // 發送到 response_url
+        if !response_url.is_empty() {
+            if let Err(e) = reqwest::Client::new()
+                .post(&response_url)
+                .json(&response_payload)
+                .send()
+                .await
+            {
+                error!("透過 response_url 發送貼圖失敗: {}", e);
+            } else {
+                info!("成功透過 response_url 發送貼圖: {}", sticker.name);
+            }
         } else {
-            info!("成功發送貼圖: {}", sticker.name);
+            error!("response_url 為空，無法發送貼圖");
         }
     } else {
         error!("找不到貼圖索引: {}", sticker_index);

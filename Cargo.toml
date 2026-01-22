@@ -16,6 +16,7 @@ thiserror = "2.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 warp = "0.3"
+urlencoding = "2.1"
 
 [dev-dependencies]
 mockito = "1.6"

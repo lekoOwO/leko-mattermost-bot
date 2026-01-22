@@ -77,11 +77,15 @@ pub struct SlashCommand {
 pub struct DialogSubmission {
     pub callback_id: String,
     pub submission: serde_json::Value,
+    #[allow(dead_code)]
     pub channel_id: String,
     #[allow(dead_code)]
     pub user_id: String,
+    #[allow(dead_code)]
     #[serde(default)]
     pub state: Option<String>,
+    #[allow(dead_code)]
+    pub response_url: Option<String>, // Dialog submission 的 response URL
 }
 
 impl MattermostClient {

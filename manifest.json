@@ -1,0 +1,42 @@
+{
+  "app_id": "com.leko.sticker",
+  "version": "0.1.0",
+  "homepage_url": "https://github.com/leko/mattermost-bot",
+  "display_name": "貼圖機器人",
+  "description": "在 Mattermost 中快速分享各種貼圖",
+  "icon": "icon.png",
+  "requested_permissions": [
+    "act_as_bot"
+  ],
+  "requested_locations": [
+    "/command"
+  ],
+  "bot": {
+    "username": "sticker-bot",
+    "display_name": "貼圖機器人",
+    "description": "幫助你快速找到並分享貼圖"
+  },
+  "http": {
+    "root_url": "${MATTERMOST_SITEURL}"
+  },
+  "bindings": {
+    "slash_commands": [
+      {
+        "path": "/sticker",
+        "bindings": {
+          "location": "/command",
+          "label": "sticker",
+          "hint": "[關鍵字]",
+          "description": "選擇貼圖",
+          "call": {
+            "path": "/api/v1/sticker",
+            "expand": {
+              "acting_user": "all",
+              "acting_user_access_token": "all"
+            }
+          }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  leko-mattermost-bot:
+    build: .
+    container_name: leko-mattermost-bot
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+      - ./config.yaml:/app/config.yaml
+    environment:
+      - RUST_LOG=info
+    restart: unless-stopped

@@ -64,12 +64,18 @@ impl StickerDatabase {
             .position(|h| h == "名稱")
             .with_context(|| format!("CSV 檔案中找不到「名稱」欄位: {}", path))?;
 
-        // 先尋找「圖片」欄位，找不到再找「i.imgur」欄位
+        // 先尋找「圖片」欄位，找不到再找「圖片網址」，最後找「i.imgur」欄位
         let image_url_idx = headers
             .iter()
             .position(|h| h == "圖片")
+            .or_else(|| headers.iter().position(|h| h == "圖片網址"))
             .or_else(|| headers.iter().position(|h| h == "i.imgur"))
-            .with_context(|| format!("CSV 檔案中找不到「圖片」或「i.imgur」欄位: {}", path))?;
+            .with_context(|| {
+                format!(
+                    "CSV 檔案中找不到「圖片」、「圖片網址」或「i.imgur」欄位: {}",
+                    path
+                )
+            })?;
 
         for result in reader.records() {
             let record = result.with_context(|| format!("解析 CSV 記錄時發生錯誤: {}", path))?;

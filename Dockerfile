@@ -1,5 +1,8 @@
 # 多階段建置，最佳化 Docker 映像檔大小
-FROM rust:1.83 as builder
+FROM rust:1.83-alpine AS builder
+
+# 安裝建置依賴
+RUN apk add --no-cache musl-dev
 
 WORKDIR /app
 
@@ -18,13 +21,11 @@ COPY src ./src
 # 建置實際的應用程式
 RUN cargo build --release
 
-# 執行階段使用更小的映像檔
-FROM debian:bookworm-slim
+# 執行階段使用 Alpine Linux
+FROM alpine:3.19
 
 # 安裝執行時期依賴
-RUN apt-get update && \
-    apt-get install -y ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache ca-certificates
 
 WORKDIR /app
 

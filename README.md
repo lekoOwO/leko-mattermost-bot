@@ -81,7 +81,7 @@ stickers:
 
 ### CSV 格式
 
-支援兩種 header：
+支援三種 header：
 
 ```csv
 名稱,圖片
@@ -92,7 +92,15 @@ stickers:
 或
 
 ```csv
-名稱,圖片/i.imgur
+名稱,圖片網址
+海綿寶寶,https://i.imgur.com/abc123.jpg
+派大星,https://i.imgur.com/def456.jpg
+```
+
+或
+
+```csv
+名稱,i.imgur
 海綿寶寶,abc123
 派大星,def456
 ```
@@ -111,12 +119,12 @@ stickers:
 ### 使用 GitHub Container Registry
 
 ```bash
-docker pull ghcr.io/leko/leko-mattermost-bot:latest
+docker pull ghcr.io/lekoowo/leko-mattermost-bot:main
 
 docker run -d \
   -p 3000:3000 \
   -v $(pwd)/data:/app/data \
-  ghcr.io/leko/leko-mattermost-bot:latest \
+  ghcr.io/lekoowo/leko-mattermost-bot:main \
   -c /app/data/config.yaml -H 0.0.0.0 -p 3000
 ```
 

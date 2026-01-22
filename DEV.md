@@ -2,13 +2,13 @@
 
 ## 技術棧
 
-- **語言**: Rust 2021 Edition
-- **HTTP 框架**: warp 0.3
-- **非同步運行時**: tokio 1.42
-- **HTTP 客戶端**: reqwest 0.12 (rustls-tls)
+- **語言**: Rust 2024 Edition
+- **HTTP 框架**: warp
+- **非同步運行時**: tokio
+- **HTTP 客戶端**: reqwest (rustls)
 - **序列化**: serde, serde_json, serde_yaml
-- **CSV 解析**: csv 1.3
-- **CLI**: clap 4.5
+- **CSV 解析**: csv
+- **CLI**: clap
 - **日誌**: tracing + tracing-subscriber
 
 ## 專案架構
@@ -55,18 +55,9 @@ stickers:
 
 ### CSV 格式
 
-支援兩種 header 格式：
-
-**完整 URL**:
 ```csv
 名稱,圖片
 海綿寶寶,https://i.imgur.com/abc123.jpg
-```
-
-**imgur hash** (自動補全):
-```csv
-名稱,圖片/i.imgur
-海綿寶寶,abc123
 ```
 
 ### JSON 格式

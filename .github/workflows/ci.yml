@@ -202,24 +202,26 @@ jobs:
           make_latest: true
 
   docker-build:
-    name: Build Docker image (${{ matrix.platform }})
+    name: Build Docker image (${{ matrix.platform.arch }})
     needs: [check]
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.platform.runner }}
     permissions:
       contents: read
       packages: write
     strategy:
       matrix:
         platform:
-          - linux/amd64
-          - linux/arm64
+          - arch: linux/amd64
+            runner: ubuntu-latest
+          - arch: linux/arm64
+            runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
       - name: Prepare
         id: prep
         run: |
-          platform=${{ matrix.platform }}
+          platform=${{ matrix.platform.arch }}
           echo "platform-pair=${platform//\//-}" >> $GITHUB_OUTPUT
           # 將 repository 轉為小寫
           echo "image-name=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
@@ -251,7 +253,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: ${{ matrix.platform }}
+          platforms: ${{ matrix.platform.arch }}
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.REGISTRY }}/${{ steps.prep.outputs.image-name }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
           cache-from: type=gha,scope=build-${{ steps.prep.outputs.platform-pair }}

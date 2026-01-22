@@ -106,12 +106,20 @@ stickers:
 
         fs::write(&config_path, yaml_content).unwrap();
 
-        env::set_var("CONFIG_YAML", config_path.to_str().unwrap());
+        // SAFETY: This test runs in isolation and does not rely on environment variable
+        // consistency across threads.
+        unsafe {
+            env::set_var("CONFIG_YAML", config_path.to_str().unwrap());
+        }
 
         let config = Config::load(None).unwrap();
 
         assert_eq!(config.mattermost.url, "https://env-example.com");
 
-        env::remove_var("CONFIG_YAML");
+        // SAFETY: This test runs in isolation and does not rely on environment variable
+        // consistency across threads.
+        unsafe {
+            env::remove_var("CONFIG_YAML");
+        }
     }
 }

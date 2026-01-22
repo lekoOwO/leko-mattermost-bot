@@ -1,5 +1,5 @@
 # 多階段建置，最佳化 Docker 映像檔大小
-FROM rust:1.83-alpine AS builder
+FROM rust:1.92-alpine AS builder
 
 # 安裝建置依賴
 RUN apk add --no-cache musl-dev

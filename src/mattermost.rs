@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use reqwest::{header, Client};
+use reqwest::{Client, header};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]

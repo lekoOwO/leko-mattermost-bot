@@ -12,6 +12,8 @@ pub struct MattermostClient {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Post {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     pub channel_id: String,
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -20,46 +22,76 @@ pub struct Post {
     pub props: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Dialog {
-    pub trigger_id: String,
-    pub url: String,
-    pub dialog: DialogDefinition,
+/// Interactive Message Attachment
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Attachment {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub state: Option<String>,
+    pub fallback: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pretext: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author_icon: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thumb_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub actions: Option<Vec<Action>>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DialogDefinition {
-    pub callback_id: String,
-    pub title: String,
-    pub introduction_text: String,
-    pub submit_label: String,
-    pub elements: Vec<DialogElement>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DialogElement {
-    pub display_name: String,
+/// Interactive Message Action
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Action {
+    pub id: String,
     pub name: String,
     #[serde(rename = "type")]
-    pub element_type: String,
+    pub action_type: String,  // "button" or "select"
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub placeholder: Option<String>,
+    pub style: Option<String>,  // "default", "primary", "success", "good", "warning", "danger"
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub options: Option<Vec<DialogOption>>,
+    pub integration: Option<Integration>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub data_source: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub optional: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub default: Option<String>,
+    pub options: Option<Vec<ActionOption>>,
 }
 
+/// Action Integration（指定 callback URL 和 context）
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DialogOption {
+pub struct Integration {
+    pub url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context: Option<serde_json::Value>,
+}
+
+/// Select Action Option
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActionOption {
     pub text: String,
     pub value: String,
+}
+
+/// Interactive Message Action Callback Request
+#[derive(Debug, Deserialize)]
+pub struct ActionRequest {
+    pub user_id: String,
+    #[serde(default)]
+    pub user_name: Option<String>,
+    #[allow(dead_code)]
+    pub channel_id: String,
+    #[allow(dead_code)]
+    pub post_id: String,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub trigger_id: Option<String>,
+    #[serde(default)]
+    pub context: serde_json::Value,
 }
 
 #[allow(dead_code)]
@@ -71,21 +103,6 @@ pub struct SlashCommand {
     pub command: String,
     pub text: String,
     pub trigger_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct DialogSubmission {
-    pub callback_id: String,
-    pub submission: serde_json::Value,
-    #[allow(dead_code)]
-    pub channel_id: String,
-    #[allow(dead_code)]
-    pub user_id: String,
-    #[allow(dead_code)]
-    #[serde(default)]
-    pub state: Option<String>,
-    #[allow(dead_code)]
-    pub response_url: Option<String>, // Dialog submission 的 response URL
 }
 
 impl MattermostClient {
@@ -127,38 +144,83 @@ impl MattermostClient {
         Ok(())
     }
 
-    /// 開啟互動式對話框
-    pub async fn open_dialog(&self, dialog: &Dialog) -> Result<()> {
-        let url = format!("{}/api/v4/actions/dialogs/open", self.base_url);
-
-        tracing::info!(
-            "正在開啟對話框: URL={}, trigger_id={}",
-            url,
-            dialog.trigger_id
-        );
-        tracing::debug!("Dialog 內容: {:?}", dialog);
+    /// 發送訊息到頻道並回傳 Post ID
+    #[allow(dead_code)]
+    pub async fn create_post_with_response(&self, post: &Post) -> Result<String> {
+        let url = format!("{}/api/v4/posts", self.base_url);
 
         let response = self
             .client
             .post(&url)
-            .json(dialog)
+            .json(post)
             .send()
             .await
-            .context("開啟對話框失敗")?;
+            .context("發送訊息失敗")?;
 
-        let status = response.status();
-        let response_text = response.text().await.unwrap_or_default();
-
-        if !status.is_success() {
-            tracing::error!(
-                "開啟對話框失敗: status={}, response={}",
-                status,
-                response_text
-            );
-            anyhow::bail!("開啟對話框失敗: {} - {}", status, response_text);
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            anyhow::bail!("發送訊息失敗: {} - {}", status, text);
         }
 
-        tracing::info!("對話框開啟成功: {}", response_text);
+        let post_response: serde_json::Value = response.json().await.context("解析回應失敗")?;
+        let post_id = post_response
+            .get("id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("回應中缺少 post id"))?
+            .to_string();
+
+        Ok(post_id)
+    }
+
+    /// 更新訊息
+    #[allow(dead_code)]
+    pub async fn update_post(&self, post_id: &str, message: &str, props: Option<serde_json::Value>) -> Result<()> {
+        let url = format!("{}/api/v4/posts/{}", self.base_url, post_id);
+
+        let mut payload = serde_json::json!({
+            "id": post_id,
+            "message": message,
+        });
+
+        if let Some(p) = props {
+            payload["props"] = p;
+        }
+
+        let response = self
+            .client
+            .put(&url)
+            .json(&payload)
+            .send()
+            .await
+            .context("更新訊息失敗")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            anyhow::bail!("更新訊息失敗: {} - {}", status, text);
+        }
+
+        Ok(())
+    }
+
+    /// 刪除訊息
+    #[allow(dead_code)]
+    pub async fn delete_post(&self, post_id: &str) -> Result<()> {
+        let url = format!("{}/api/v4/posts/{}", self.base_url, post_id);
+
+        let response = self
+            .client
+            .delete(&url)
+            .send()
+            .await
+            .context("刪除訊息失敗")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            anyhow::bail!("刪除訊息失敗: {} - {}", status, text);
+        }
 
         Ok(())
     }
@@ -211,34 +273,39 @@ mod tests {
     }
 
     #[test]
-    fn test_dialog_serialization() {
-        let dialog = Dialog {
-            trigger_id: "test_trigger".to_string(),
-            url: "https://example.com/callback".to_string(),
-            state: None,
-            dialog: DialogDefinition {
-                callback_id: "sticker_select".to_string(),
-                title: "選擇貼圖".to_string(),
-                introduction_text: "請選擇一個貼圖".to_string(),
-                submit_label: "發送".to_string(),
-                elements: vec![DialogElement {
-                    display_name: "貼圖".to_string(),
-                    name: "sticker".to_string(),
-                    element_type: "select".to_string(),
-                    placeholder: Some("搜尋貼圖...".to_string()),
-                    options: Some(vec![DialogOption {
+    fn test_attachment_serialization() {
+        let attachment = Attachment {
+            fallback: Some("選擇貼圖".to_string()),
+            color: Some("#3AA3E3".to_string()),
+            pretext: None,
+            text: Some("請選擇一個貼圖".to_string()),
+            author_name: None,
+            author_icon: None,
+            title: Some("貼圖選擇器".to_string()),
+            image_url: None,
+            thumb_url: None,
+            actions: Some(vec![
+                Action {
+                    id: "sticker_select".to_string(),
+                    name: "選擇貼圖".to_string(),
+                    action_type: "select".to_string(),
+                    style: None,
+                    integration: Some(Integration {
+                        url: "https://example.com/action".to_string(),
+                        context: Some(serde_json::json!({
+                            "action": "select_sticker"
+                        })),
+                    }),
+                    options: Some(vec![ActionOption {
                         text: "測試貼圖".to_string(),
-                        value: "TEST001".to_string(),
+                        value: "0".to_string(),
                     }]),
-                    data_source: None,
-                    optional: None,
-                    default: None,
-                }],
-            },
+                },
+            ]),
         };
 
-        let json = serde_json::to_string(&dialog).unwrap();
-        assert!(json.contains("callback_id"));
+        let json = serde_json::to_string(&attachment).unwrap();
         assert!(json.contains("sticker_select"));
+        assert!(json.contains("選擇貼圖"));
     }
 }

@@ -154,24 +154,80 @@ impl StickerDatabase {
         &self.stickers
     }
 
+    /// 解析搜尋查詢
+    /// 格式：[分類:] 關鍵字1 關鍵字2 -排除詞
+    /// 例如：
+    /// - "a b" -> 必須包含 a 和 b
+    /// - "海綿寶寶: a" -> 在海綿寶寶分類中搜尋 a
+    /// - "-123" -> 不包含 123
+    /// - "海綿寶寶: a b -c" -> 在海綿寶寶分類中搜尋包含 a 和 b 但不包含 c
+    fn parse_query(query: &str) -> (Option<String>, Vec<String>, Vec<String>) {
+        let query = query.trim();
+        
+        // 檢查是否有分類指定（格式：分類: 關鍵字）
+        let (category, keyword_part) = if let Some(colon_pos) = query.find(':') {
+            let cat = query[..colon_pos].trim().to_string();
+            let kw = query[colon_pos + 1..].trim();
+            (Some(cat), kw)
+        } else {
+            (None, query)
+        };
+
+        // 解析關鍵字和排除詞
+        let mut include_keywords: Vec<String> = Vec::new();
+        let mut exclude_keywords: Vec<String> = Vec::new();
+
+        for token in keyword_part.split_whitespace() {
+            if let Some(excluded) = token.strip_prefix('-') {
+                if !excluded.is_empty() {
+                    exclude_keywords.push(excluded.to_lowercase());
+                }
+            } else if !token.is_empty() {
+                include_keywords.push(token.to_lowercase());
+            }
+        }
+
+        (category, include_keywords, exclude_keywords)
+    }
+
     /// 根據分類和關鍵字搜尋貼圖
+    /// 支援進階搜尋語法：
+    /// - 空格分隔多個關鍵字（AND 條件）
+    /// - `分類: 關鍵字` 指定分類搜尋
+    /// - `-關鍵字` 排除包含該關鍵字的結果
     pub fn search(&self, keyword: &str, categories: Option<&[String]>) -> Vec<&Sticker> {
-        let keyword_lower = keyword.to_lowercase();
+        let (query_category, include_keywords, exclude_keywords) = Self::parse_query(keyword);
+
         self.stickers
             .iter()
             .filter(|s| {
-                // 檢查分類過濾
-                let category_match = if let Some(cats) = categories {
+                // 檢查分類過濾（優先使用查詢中指定的分類）
+                let category_match = if let Some(ref cat) = query_category {
+                    s.category.to_lowercase() == cat.to_lowercase()
+                } else if let Some(cats) = categories {
                     cats.is_empty() || cats.contains(&s.category)
                 } else {
                     true
                 };
 
-                // 檢查關鍵字
-                let keyword_match =
-                    keyword.is_empty() || s.name.to_lowercase().contains(&keyword_lower);
+                if !category_match {
+                    return false;
+                }
 
-                category_match && keyword_match
+                let name_lower = s.name.to_lowercase();
+
+                // 檢查所有包含關鍵字（AND 條件）
+                let include_match = include_keywords.is_empty()
+                    || include_keywords.iter().all(|kw| name_lower.contains(kw));
+
+                if !include_match {
+                    return false;
+                }
+
+                // 檢查排除關鍵字（任一匹配則排除）
+                let exclude_match = exclude_keywords.iter().any(|kw| name_lower.contains(kw));
+
+                !exclude_match
             })
             .collect()
     }
@@ -294,6 +350,58 @@ mod tests {
         let results = db.search("", Some(&vec!["分類A".to_string()]));
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].name, "測試海螺");
+    }
+
+    #[test]
+    fn test_search_advanced() {
+        let mut db = StickerDatabase::new();
+        db.stickers.push(Sticker {
+            name: "開心派大星".to_string(),
+            image_url: "https://example.com/1.jpg".to_string(),
+            category: "海綿寶寶".to_string(),
+        });
+        db.stickers.push(Sticker {
+            name: "難過派大星".to_string(),
+            image_url: "https://example.com/2.jpg".to_string(),
+            category: "海綿寶寶".to_string(),
+        });
+        db.stickers.push(Sticker {
+            name: "開心章魚哥".to_string(),
+            image_url: "https://example.com/3.jpg".to_string(),
+            category: "海綿寶寶".to_string(),
+        });
+        db.stickers.push(Sticker {
+            name: "開心小新".to_string(),
+            image_url: "https://example.com/4.jpg".to_string(),
+            category: "蠟筆小新".to_string(),
+        });
+
+        // 測試多關鍵字（AND 條件）
+        let results = db.search("開心 派大星", None);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "開心派大星");
+
+        // 測試分類搜尋
+        let results = db.search("海綿寶寶: 開心", None);
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|s| s.name.contains("開心")));
+        assert!(results.iter().all(|s| s.category == "海綿寶寶"));
+
+        // 測試排除
+        let results = db.search("開心 -派大星", None);
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|s| !s.name.contains("派大星")));
+
+        // 測試分類 + 排除
+        let results = db.search("海綿寶寶: -章魚哥", None);
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|s| s.category == "海綿寶寶"));
+        assert!(results.iter().all(|s| !s.name.contains("章魚哥")));
+
+        // 測試分類 + 多關鍵字 + 排除
+        let results = db.search("海綿寶寶: 派大星 -難過", None);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "開心派大星");
     }
 
     #[test]

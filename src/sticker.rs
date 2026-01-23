@@ -149,6 +149,20 @@ impl StickerDatabase {
         categories
     }
 
+    /// 取得每個分類的貼圖數量統計
+    pub fn get_category_stats(&self) -> HashMap<String, usize> {
+        let mut stats = HashMap::new();
+        for sticker in &self.stickers {
+            *stats.entry(sticker.category.clone()).or_insert(0) += 1;
+        }
+        stats
+    }
+
+    /// 取得貼圖總數
+    pub fn get_total_count(&self) -> usize {
+        self.stickers.len()
+    }
+
     /// 取得所有貼圖
     pub fn get_all(&self) -> &[Sticker] {
         &self.stickers

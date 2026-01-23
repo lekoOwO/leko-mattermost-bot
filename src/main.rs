@@ -40,6 +40,7 @@ pub struct AppState {
     pub mattermost_client: MattermostClient,
     pub sticker_database: StickerDatabase,
     pub bot_user_id: String,
+    pub config_path: PathBuf,
 }
 
 #[tokio::main]
@@ -57,8 +58,13 @@ async fn main() -> Result<()> {
 
     info!("正在啟動 Leko's Mattermost Bot...");
 
+    // 確定配置文件路徑
+    let config_path = args.config
+        .or_else(|| std::env::var("CONFIG_YAML").ok().map(PathBuf::from))
+        .unwrap_or_else(|| PathBuf::from("config.yaml"));
+
     // 載入配置
-    let config = Config::load(args.config).context("載入配置失敗")?;
+    let config = Config::from_path(&config_path).context("載入配置失敗")?;
 
     info!("配置載入成功");
     info!("Mattermost URL: {}", config.mattermost.url);
@@ -99,6 +105,7 @@ async fn main() -> Result<()> {
         mattermost_client,
         sticker_database,
         bot_user_id,
+        config_path,
     }));
 
     // 啟動 WebSocket 客戶端（在背景執行）

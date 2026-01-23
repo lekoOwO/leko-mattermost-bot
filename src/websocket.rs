@@ -286,33 +286,58 @@ async fn handle_posted_event(data: &serde_json::Value, state: Arc<RwLock<AppStat
     let response_message = match command {
         "" => {
             // 空訊息，顯示 help
+            drop(app_state);
             get_help_message()
         }
         "help" | "幫助" | "?" => {
             // 顯示 help
+            drop(app_state);
             get_help_message()
         }
         "ping" => {
             // 測試連線
+            drop(app_state);
             "🏓 Pong!".to_string()
         }
         "status" | "狀態" => {
             // 顯示狀態
             let sticker_count = app_state.sticker_database.count();
+            let admin_count = app_state.config.admin.len();
+            drop(app_state);
             format!(
                 "### ℹ️ Bot 狀態\n\n- **貼圖數量**: {} 張\n- **管理員數量**: {} 人\n- **狀態**: 🟢 運行中",
                 sticker_count,
-                app_state.config.admin.len()
+                admin_count
             )
+        }
+        "reload" => {
+            // 重新載入配置
+            drop(app_state);
+            match handle_reload_config(state.clone()).await {
+                Ok(msg) => msg,
+                Err(e) => {
+                    error!("重新載入配置失敗: {}", e);
+                    format!("❌ 重新載入配置失敗: {}", e)
+                }
+            }
+        }
+        "sticker" | "stickers" | "貼圖" => {
+            // 顯示貼圖統計
+            drop(app_state);
+            handle_sticker_stats(state.clone()).await
         }
         _ => {
             // 未知指令
+            drop(app_state);
             format!(
                 "❓ 未知指令: `{}`\n\n輸入 `help` 查看可用指令。",
                 command
             )
         }
     };
+
+    // 重新獲取 app_state 來發送回應
+    let app_state = state.read().await;
 
     // 發送回應
     let response_post = Post {
@@ -341,14 +366,90 @@ fn get_help_message() -> String {
 - **`help`** / **`幫助`** / **`?`** - 顯示此說明訊息
 - **`ping`** - 測試 bot 連線狀態
 - **`status`** / **`狀態`** - 顯示 bot 運行狀態
+- **`sticker`** / **`stickers`** / **`貼圖`** - 顯示貼圖庫統計資訊
+- **`reload`** - 重新載入配置（貼圖、管理員等）
 
 #### 提示：
 
 - 這些指令只能由管理員在 Direct Message 中使用
+- `reload` 指令會重新讀取配置檔案，但不會影響 Mattermost 連線
 - 更多功能正在開發中...
 
 ---
 💡 如需協助，請聯繫系統管理員。
 "#
     .to_string()
+}
+
+/// 處理重新載入配置
+async fn handle_reload_config(state: Arc<RwLock<AppState>>) -> Result<String> {
+    info!("開始重新載入配置...");
+    
+    let mut app_state = state.write().await;
+    
+    // 讀取配置文件路徑
+    let config_path = app_state.config_path.clone();
+    
+    // 重新載入配置
+    let new_config = crate::config::Config::from_path(&config_path)
+        .context("讀取配置檔案失敗")?;
+    
+    info!("配置檔案讀取成功");
+    
+    // 重新載入貼圖資料庫
+    let new_sticker_database = crate::sticker::StickerDatabase::load_from_config(&new_config.stickers)
+        .context("載入貼圖資料庫失敗")?;
+    
+    let sticker_count = new_sticker_database.count();
+    info!("貼圖資料庫重新載入成功，共 {} 張貼圖", sticker_count);
+    
+    // 更新 admin 列表
+    let admin_count = new_config.admin.len();
+    if !new_config.admin.is_empty() {
+        info!("管理員列表已更新: {:?}", new_config.admin);
+    } else {
+        info!("未設定管理員");
+    }
+    
+    // 更新狀態（保留 mattermost_client 和 bot_user_id）
+    app_state.config.stickers = new_config.stickers;
+    app_state.config.admin = new_config.admin;
+    app_state.sticker_database = new_sticker_database;
+    
+    info!("配置重新載入完成");
+    
+    Ok(format!(
+        "### ✅ 配置重新載入成功\n\n- **貼圖數量**: {} 張\n- **管理員數量**: {} 人\n- **配置檔案**: `{}`",
+        sticker_count,
+        admin_count,
+        config_path.display()
+    ))
+}
+
+/// 處理貼圖統計資訊
+async fn handle_sticker_stats(state: Arc<RwLock<AppState>>) -> String {
+    let app_state = state.read().await;
+    
+    // 取得統計資訊
+    let total_count = app_state.sticker_database.get_total_count();
+    let category_stats = app_state.sticker_database.get_category_stats();
+    
+    // 排序分類名稱
+    let mut categories: Vec<_> = category_stats.iter().collect();
+    categories.sort_by(|a, b| a.0.cmp(b.0));
+    
+    // 建立訊息
+    let mut message = String::from("### 📊 貼圖庫統計\n\n");
+    message.push_str(&format!("**總計**: {} 張貼圖\n\n", total_count));
+    
+    if categories.is_empty() {
+        message.push_str("⚠️ 目前沒有任何貼圖資料。\n");
+    } else {
+        message.push_str("#### 各分類貼圖數量：\n\n");
+        for (category, count) in categories {
+            message.push_str(&format!("- **{}**: {} 張\n", category, count));
+        }
+    }
+    
+    message
 }

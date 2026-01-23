@@ -2,22 +2,21 @@ mod config;
 mod handlers;
 mod mattermost;
 mod sticker;
+mod websocket;
 
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{error, info};
 use warp::Filter;
 
 use config::Config;
-use handlers::{
-    handle_action, handle_dm_webhook, handle_leko_command, handle_rejection,
-    handle_sticker_command,
-};
+use handlers::{handle_action, handle_leko_command, handle_rejection, handle_sticker_command};
 use mattermost::MattermostClient;
 use sticker::StickerDatabase;
+use websocket::start_websocket;
 
 #[derive(Parser, Debug)]
 #[command(name = "leko-mattermost-bot")]
@@ -40,6 +39,7 @@ pub struct AppState {
     pub config: Config,
     pub mattermost_client: MattermostClient,
     pub sticker_database: StickerDatabase,
+    pub bot_user_id: String,
 }
 
 #[tokio::main]
@@ -71,6 +71,15 @@ async fn main() -> Result<()> {
 
     info!("Mattermost 客戶端初始化成功");
 
+    // 獲取 bot 自己的 user_id
+    let bot_user = mattermost_client
+        .get_me()
+        .await
+        .context("無法獲取 bot 使用者資訊")?;
+    let bot_user_id = bot_user.id.clone();
+    
+    info!("Bot 使用者: {} ({})", bot_user.username, bot_user_id);
+
     // 載入貼圖資料庫
     let sticker_database =
         StickerDatabase::load_from_config(&config.stickers).context("載入貼圖資料庫失敗")?;
@@ -89,7 +98,16 @@ async fn main() -> Result<()> {
         config,
         mattermost_client,
         sticker_database,
+        bot_user_id,
     }));
+
+    // 啟動 WebSocket 客戶端（在背景執行）
+    let ws_state = state.clone();
+    tokio::spawn(async move {
+        if let Err(e) = start_websocket(ws_state).await {
+            error!("WebSocket 客戶端錯誤: {}", e);
+        }
+    });
 
     // 啟動 HTTP 伺服器
     let addr = format!("{}:{}", args.host, args.port);
@@ -125,15 +143,6 @@ async fn start_server(state: Arc<RwLock<AppState>>, addr: &str) -> Result<()> {
         .and(with_state(state.clone()))
         .and_then(handle_action);
 
-    // DM Webhook 處理器
-    let dm_webhook = warp::post()
-        .and(warp::path("webhook"))
-        .and(warp::path("dm"))
-        .and(warp::path::end())
-        .and(warp::body::json())
-        .and(with_state(state.clone()))
-        .and_then(handle_dm_webhook);
-
     // 健康檢查端點
     let health = warp::get()
         .and(warp::path("health"))
@@ -152,7 +161,6 @@ async fn start_server(state: Arc<RwLock<AppState>>, addr: &str) -> Result<()> {
     });
 
     let routes = health
-        .or(dm_webhook)
         .or(action_handler)
         .or(leko_command)
         .or(sticker_command)

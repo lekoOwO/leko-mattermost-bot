@@ -62,16 +62,12 @@ admin:                          # 管理員列表（可選）
    - Request Method: `POST`
    - 複製 Token 到 `config.yaml` 的 `slash_command_token`
 
-3. **設定 DM Webhook**（選填，用於管理功能）：
-   - 到 Integrations > Outgoing Webhooks > Add Outgoing Webhook
-   - Channel: 選擇 "Private Messages"
-   - Trigger Words: 留空（接收所有 DM）
-   - Callback URLs: `http://your-bot-server:3000/webhook/dm`
-
-4. **啟用 Interactive Dialogs**：
+3. **啟用 Interactive Dialogs**：
    - 到 System Console > Integrations > Integration Management
    - 確認 "Enable integrations to override usernames" 已啟用
    - 確認 "Enable integrations to override profile picture icons" 已啟用
+
+> **注意**：Bot 會自動透過 WebSocket 連接到 Mattermost 接收 Direct Message，不需要額外設定 Outgoing Webhook。
 
 ### 執行
 

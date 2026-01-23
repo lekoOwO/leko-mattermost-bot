@@ -15,15 +15,26 @@
 
 ```
 src/
-├── main.rs         # HTTP 伺服器與路由處理
-│   ├── handle_sticker_command()     # 處理 /sticker slash command
-│   ├── handle_dialog_submission()   # 處理 dialog 提交
-│   └── handle_app_*()               # Mattermost App API (保留)
-├── config.rs       # YAML 配置管理
-├── mattermost.rs   # Mattermost API 客戶端與資料結構
-├── sticker.rs      # 貼圖資料庫（支援搜尋、分類）
-└── app.rs          # Mattermost App 框架類型定義
+├── main.rs              # HTTP 伺服器與路由處理
+├── config.rs            # YAML 配置管理
+├── mattermost.rs        # Mattermost API 客戶端與資料結構
+├── sticker.rs           # 貼圖資料庫（支援搜尋、分類）
+└── handlers/            # HTTP 請求處理器模組
+    ├── mod.rs           # 模組入口與錯誤處理
+    ├── auth.rs          # 認證與 token 驗證
+    ├── leko.rs          # /leko 指令處理
+    ├── sticker.rs       # /sticker 指令處理
+    └── actions.rs       # Interactive Message 動作處理
 ```
+
+### handlers 模組說明
+
+- **mod.rs**: 模組入口，重新導出公開 API 並處理統一的錯誤處理
+- **auth.rs**: 負責 slash command token 驗證，防止未授權的請求
+- **leko.rs**: 處理 `/leko` 指令及其子指令（help, sticker）
+- **sticker.rs**: 處理 `/sticker` 指令，搜尋並顯示貼圖選擇器
+- **actions.rs**: 處理 Interactive Message 的回調動作（選擇貼圖、發送、取消）
+
 
 ## 配置系統
 

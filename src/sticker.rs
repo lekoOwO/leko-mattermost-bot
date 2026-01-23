@@ -347,7 +347,7 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].name, "測試海螺");
 
-        let results = db.search("", Some(&vec!["分類A".to_string()]));
+        let results = db.search("", Some(&["分類A".to_string()]));
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].name, "測試海螺");
     }

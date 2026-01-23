@@ -12,7 +12,7 @@ use tracing::info;
 use warp::Filter;
 
 use config::Config;
-use handlers::{handle_action, handle_rejection, handle_sticker_command};
+use handlers::{handle_action, handle_leko_command, handle_rejection, handle_sticker_command};
 use mattermost::MattermostClient;
 use sticker::StickerDatabase;
 
@@ -99,6 +99,14 @@ async fn start_server(state: Arc<RwLock<AppState>>, addr: &str) -> Result<()> {
         .and(with_state(state.clone()))
         .and_then(handle_sticker_command);
 
+    // /leko slash command 路由
+    let leko_command = warp::post()
+        .and(warp::path("leko"))
+        .and(warp::path::end())
+        .and(warp::body::form())
+        .and(with_state(state.clone()))
+        .and_then(handle_leko_command);
+
     // Interactive Message Action 處理器
     let action_handler = warp::post()
         .and(warp::path("action"))
@@ -126,6 +134,7 @@ async fn start_server(state: Arc<RwLock<AppState>>, addr: &str) -> Result<()> {
 
     let routes = health
         .or(action_handler)
+        .or(leko_command)
         .or(sticker_command)
         .recover(handle_rejection)
         .with(log);

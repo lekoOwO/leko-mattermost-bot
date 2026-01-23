@@ -9,7 +9,8 @@
 - 🔍 **即時搜尋**：可以搜尋貼圖名稱
 - 👤 **身份保留**：發送的貼圖顯示為觸發指令者的身份和頭像
 - 🔒 **Token 驗證**：支援 Slash Command Token 驗證
-- 🚀 **多平台支援**：提供 Linux (x86_64/aarch64)、Windows、macOS 預編譯版本
+- � **管理功能**：透過 Direct Message 管理 bot（限管理員）
+- �🚀 **多平台支援**：提供 Linux (x86_64/aarch64)、Windows、macOS 預編譯版本
 
 ## 快速開始
 
@@ -41,6 +42,10 @@ stickers:
         - data/sb.csv
       json:
         - data/sb.json
+
+admin:                          # 管理員列表（可選）
+  - "@username"                 # @開頭代表 username
+  - "userid123"                 # 否則為 user_id
 ```
 
 ### 在 Mattermost 設定
@@ -52,12 +57,18 @@ stickers:
 
 2. **建立 Slash Command**：
    - 到 Integrations > Slash Commands > Add Slash Command
-   - Trigger Word: `sticker`
-   - Request URL: `http://your-bot-server:3000/sticker`
+   - Trigger Word: `sticker`（或 `leko`）
+   - Request URL: `http://your-bot-server:3000/sticker`（或 `/leko`）
    - Request Method: `POST`
    - 複製 Token 到 `config.yaml` 的 `slash_command_token`
 
-3. **啟用 Interactive Dialogs**：
+3. **設定 DM Webhook**（選填，用於管理功能）：
+   - 到 Integrations > Outgoing Webhooks > Add Outgoing Webhook
+   - Channel: 選擇 "Private Messages"
+   - Trigger Words: 留空（接收所有 DM）
+   - Callback URLs: `http://your-bot-server:3000/webhook/dm`
+
+4. **啟用 Interactive Dialogs**：
    - 到 System Console > Integrations > Integration Management
    - 確認 "Enable integrations to override usernames" 已啟用
    - 確認 "Enable integrations to override profile picture icons" 已啟用
@@ -70,11 +81,21 @@ stickers:
 
 ### 使用
 
-在 Mattermost 頻道中：
+在 Mattermost 頻道中使用 Slash Command：
 
 ```
 /sticker              # 顯示所有貼圖
 /sticker 關鍵字        # 搜尋貼圖
+/leko sticker         # 等同於 /sticker
+/leko help            # 顯示 /leko 指令說明
+```
+
+在與 bot 的 Direct Message 中（限管理員）：
+
+```
+help                  # 顯示管理指令說明
+ping                  # 測試連線
+status                # 顯示 bot 狀態
 ```
 
 ## 資料格式

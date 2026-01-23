@@ -24,7 +24,8 @@ src/
     ├── auth.rs          # 認證與 token 驗證
     ├── leko.rs          # /leko 指令處理
     ├── sticker.rs       # /sticker 指令處理
-    └── actions.rs       # Interactive Message 動作處理
+    ├── actions.rs       # Interactive Message 動作處理
+    └── dm.rs            # Direct Message 處理
 ```
 
 ### handlers 模組說明
@@ -34,6 +35,7 @@ src/
 - **leko.rs**: 處理 `/leko` 指令及其子指令（help, sticker）
 - **sticker.rs**: 處理 `/sticker` 指令，搜尋並顯示貼圖選擇器
 - **actions.rs**: 處理 Interactive Message 的回調動作（選擇貼圖、發送、取消）
+- **dm.rs**: 處理 Direct Message webhook，提供管理員功能
 
 
 ## 配置系統
@@ -60,6 +62,10 @@ stickers:
         - data/sb.csv      # CSV 檔案路徑
       json:
         - data/sb.json     # JSON 檔案路徑
+
+admin:                                       # 管理員列表 (選填)
+  - "@username"                              # @開頭代表 username
+  - "userid123"                              # 否則為 user_id
 ```
 
 ## 資料格式
@@ -193,7 +199,56 @@ GitHub Actions 自動化流程（`.github/workflows/ci.yml`）：
 curl -X POST http://localhost:3000/sticker \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "token=your-token&text=關鍵字&user_name=test&user_id=123&channel_id=abc&trigger_id=xyz"
+
+# 測試 DM Webhook
+curl -X POST http://localhost:3000/webhook/dm \
+  -H "Content-Type: application/json" \
+  -d '{
+    "channel_type": "D",
+    "channel_id": "channel123",
+    "user_id": "user123",
+    "user_name": "testuser",
+    "text": "help"
+  }'
 ```
+
+## Direct Message 管理功能
+
+Bot 支援透過 Direct Message 進行管理操作。
+
+### 設定管理員
+
+在 `config.yaml` 中設定管理員：
+
+```yaml
+admin:
+  - "@leko"        # 使用 username（@開頭）
+  - "userid123"    # 使用 user_id
+```
+
+### 設定 Webhook
+
+在 Mattermost 中設定 Outgoing Webhook：
+1. 進入 **Integrations > Outgoing Webhooks**
+2. 建立新的 Outgoing Webhook
+3. **Channel**: 選擇 "Private Messages"
+4. **Trigger Words**: 留空（接收所有 DM）
+5. **Callback URLs**: `http://your-bot:3000/webhook/dm`
+
+### 可用指令
+
+管理員可在與 bot 的 Direct Message 中使用以下指令：
+
+- **`help`** / **`幫助`** / **`?`** - 顯示說明訊息
+- **`ping`** - 測試連線狀態
+- **`status`** / **`狀態`** - 顯示 bot 運行狀態
+
+### 權限驗證
+
+- 只有配置中的管理員可以使用 DM 管理功能
+- 非管理員會收到警告訊息
+- 支援 username（@開頭）或 user_id 驗證
+
 
 ## 常見問題
 

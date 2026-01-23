@@ -12,7 +12,10 @@ use tracing::info;
 use warp::Filter;
 
 use config::Config;
-use handlers::{handle_action, handle_leko_command, handle_rejection, handle_sticker_command};
+use handlers::{
+    handle_action, handle_dm_webhook, handle_leko_command, handle_rejection,
+    handle_sticker_command,
+};
 use mattermost::MattermostClient;
 use sticker::StickerDatabase;
 
@@ -74,6 +77,13 @@ async fn main() -> Result<()> {
 
     info!("貼圖資料庫載入成功，共 {} 張貼圖", sticker_database.count());
 
+    // 顯示管理員配置
+    if !config.admin.is_empty() {
+        info!("管理員列表: {:?}", config.admin);
+    } else {
+        info!("未設定管理員");
+    }
+
     // 建立應用狀態
     let state = Arc::new(RwLock::new(AppState {
         config,
@@ -115,6 +125,15 @@ async fn start_server(state: Arc<RwLock<AppState>>, addr: &str) -> Result<()> {
         .and(with_state(state.clone()))
         .and_then(handle_action);
 
+    // DM Webhook 處理器
+    let dm_webhook = warp::post()
+        .and(warp::path("webhook"))
+        .and(warp::path("dm"))
+        .and(warp::path::end())
+        .and(warp::body::json())
+        .and(with_state(state.clone()))
+        .and_then(handle_dm_webhook);
+
     // 健康檢查端點
     let health = warp::get()
         .and(warp::path("health"))
@@ -133,6 +152,7 @@ async fn start_server(state: Arc<RwLock<AppState>>, addr: &str) -> Result<()> {
     });
 
     let routes = health
+        .or(dm_webhook)
         .or(action_handler)
         .or(leko_command)
         .or(sticker_command)

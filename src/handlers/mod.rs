@@ -4,12 +4,14 @@ mod auth;
 mod leko;
 mod sticker;
 mod actions;
+mod dm;
 
 // 重新導出公開的處理器函數
 pub use leko::handle_leko_command;
 pub use sticker::handle_sticker_command;
 pub use actions::handle_action;
 pub use auth::UnauthorizedError;
+pub use dm::handle_dm_webhook;
 
 use tracing::error;
 use warp::http::StatusCode;

@@ -7,6 +7,8 @@ use std::path::PathBuf;
 pub struct Config {
     pub mattermost: MattermostConfig,
     pub stickers: StickersConfig,
+    #[serde(default)]
+    pub admin: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,6 +55,20 @@ impl Config {
 
         Self::from_path(&path)
     }
+
+    /// 檢查使用者是否為管理員
+    /// 支援 username (@開頭) 或 user_id
+    pub fn is_admin(&self, user_id: &str, username: &str) -> bool {
+        self.admin.iter().any(|admin| {
+            if let Some(admin_username) = admin.strip_prefix('@') {
+                // @開頭的比對 username
+                admin_username == username
+            } else {
+                // 否則比對 user_id
+                admin == user_id
+            }
+        })
+    }
 }
 
 #[cfg(test)]
@@ -77,6 +93,9 @@ stickers:
         - data/test.csv
       json:
         - data/test.json
+admin:
+  - "@testuser"
+  - "userid123"
 "#;
 
         fs::write(&config_path, yaml_content).unwrap();
@@ -89,6 +108,12 @@ stickers:
         assert_eq!(config.stickers.categories[0].name, "測試分類");
         assert_eq!(config.stickers.categories[0].csv.len(), 1);
         assert_eq!(config.stickers.categories[0].json.len(), 1);
+        assert_eq!(config.admin.len(), 2);
+        
+        // 測試管理員驗證
+        assert!(config.is_admin("userid123", "otheruser"));
+        assert!(config.is_admin("anyid", "testuser"));
+        assert!(!config.is_admin("otherid", "otheruser"));
     }
 
     #[test]

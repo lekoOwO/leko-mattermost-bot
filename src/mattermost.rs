@@ -105,6 +105,55 @@ pub struct SlashCommand {
     pub trigger_id: String,
 }
 
+/// Webhook Post Created Event
+#[derive(Debug, Deserialize)]
+pub struct WebhookPost {
+    #[serde(default)]
+    pub channel_id: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub channel_name: Option<String>,
+    #[serde(default)]
+    pub channel_type: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub post_id: Option<String>,
+    #[serde(default)]
+    pub user_id: Option<String>,
+    #[serde(default)]
+    pub user_name: Option<String>,
+    #[serde(default)]
+    pub text: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub trigger_word: Option<String>,
+}
+
+/// User 資訊
+#[derive(Debug, Deserialize, Serialize)]
+pub struct User {
+    pub id: String,
+    pub username: String,
+    #[serde(default)]
+    pub email: Option<String>,
+    #[serde(default)]
+    pub first_name: Option<String>,
+    #[serde(default)]
+    pub last_name: Option<String>,
+}
+
+/// Channel 資訊
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Channel {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub channel_type: String, // "D" for direct, "O" for public, "P" for private
+    #[serde(default)]
+    pub display_name: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
 impl MattermostClient {
     /// 建立新的 Mattermost 客戶端
     pub fn new(base_url: String, bot_token: String) -> Result<Self> {
@@ -263,6 +312,72 @@ impl MattermostClient {
         }
 
         Ok(())
+    }
+
+    /// 獲取使用者資訊
+    pub async fn get_user(&self, user_id: &str) -> Result<User> {
+        let url = format!("{}/api/v4/users/{}", self.base_url, user_id);
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .context("獲取使用者資訊失敗")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            anyhow::bail!("獲取使用者資訊失敗: {} - {}", status, text);
+        }
+
+        let user: User = response.json().await.context("解析使用者資訊失敗")?;
+        Ok(user)
+    }
+
+    /// 獲取頻道資訊
+    pub async fn get_channel(&self, channel_id: &str) -> Result<Channel> {
+        let url = format!("{}/api/v4/channels/{}", self.base_url, channel_id);
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .context("獲取頻道資訊失敗")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            anyhow::bail!("獲取頻道資訊失敗: {} - {}", status, text);
+        }
+
+        let channel: Channel = response.json().await.context("解析頻道資訊失敗")?;
+        Ok(channel)
+    }
+
+    /// 創建 DM 頻道（如果不存在）
+    pub async fn create_direct_channel(&self, user_id_1: &str, user_id_2: &str) -> Result<Channel> {
+        let url = format!("{}/api/v4/channels/direct", self.base_url);
+
+        let payload = vec![user_id_1, user_id_2];
+
+        let response = self
+            .client
+            .post(&url)
+            .json(&payload)
+            .send()
+            .await
+            .context("創建 DM 頻道失敗")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            anyhow::bail!("創建 DM 頻道失敗: {} - {}", status, text);
+        }
+
+        let channel: Channel = response.json().await.context("解析頻道資訊失敗")?;
+        Ok(channel)
     }
 }
 

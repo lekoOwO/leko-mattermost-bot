@@ -53,9 +53,9 @@ pub struct Action {
     pub id: String,
     pub name: String,
     #[serde(rename = "type")]
-    pub action_type: String,  // "button" or "select"
+    pub action_type: String, // "button" or "select"
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub style: Option<String>,  // "default", "primary", "success", "good", "warning", "danger"
+    pub style: Option<String>, // "default", "primary", "success", "good", "warning", "danger"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub integration: Option<Integration>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -175,7 +175,12 @@ impl MattermostClient {
 
     /// 更新訊息
     #[allow(dead_code)]
-    pub async fn update_post(&self, post_id: &str, message: &str, props: Option<serde_json::Value>) -> Result<()> {
+    pub async fn update_post(
+        &self,
+        post_id: &str,
+        message: &str,
+        props: Option<serde_json::Value>,
+    ) -> Result<()> {
         let url = format!("{}/api/v4/posts/{}", self.base_url, post_id);
 
         let mut payload = serde_json::json!({
@@ -284,24 +289,22 @@ mod tests {
             title: Some("貼圖選擇器".to_string()),
             image_url: None,
             thumb_url: None,
-            actions: Some(vec![
-                Action {
-                    id: "sticker_select".to_string(),
-                    name: "選擇貼圖".to_string(),
-                    action_type: "select".to_string(),
-                    style: None,
-                    integration: Some(Integration {
-                        url: "https://example.com/action".to_string(),
-                        context: Some(serde_json::json!({
-                            "action": "select_sticker"
-                        })),
-                    }),
-                    options: Some(vec![ActionOption {
-                        text: "測試貼圖".to_string(),
-                        value: "0".to_string(),
-                    }]),
-                },
-            ]),
+            actions: Some(vec![Action {
+                id: "sticker_select".to_string(),
+                name: "選擇貼圖".to_string(),
+                action_type: "select".to_string(),
+                style: None,
+                integration: Some(Integration {
+                    url: "https://example.com/action".to_string(),
+                    context: Some(serde_json::json!({
+                        "action": "select_sticker"
+                    })),
+                }),
+                options: Some(vec![ActionOption {
+                    text: "測試貼圖".to_string(),
+                    value: "0".to_string(),
+                }]),
+            }]),
         };
 
         let json = serde_json::to_string(&attachment).unwrap();

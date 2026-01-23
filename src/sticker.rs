@@ -163,7 +163,7 @@ impl StickerDatabase {
     /// - "海綿寶寶: a b -c" -> 在海綿寶寶分類中搜尋包含 a 和 b 但不包含 c
     fn parse_query(query: &str) -> (Option<String>, Vec<String>, Vec<String>) {
         let query = query.trim();
-        
+
         // 檢查是否有分類指定（格式：分類: 關鍵字）
         let (category, keyword_part) = if let Some(colon_pos) = query.find(':') {
             let cat = query[..colon_pos].trim().to_string();

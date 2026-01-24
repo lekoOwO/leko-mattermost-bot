@@ -395,6 +395,7 @@ async fn handle_reload_config(state: Arc<RwLock<AppState>>) -> Result<String> {
     // 重新載入貼圖資料庫
     let new_sticker_database =
         crate::sticker::StickerDatabase::load_from_config(&new_config.stickers)
+            .await
             .context("載入貼圖資料庫失敗")?;
 
     let sticker_count = new_sticker_database.count();

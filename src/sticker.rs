@@ -46,23 +46,20 @@ impl StickerDatabase {
         }
     }
 
-    /// 從 CSV 檔案載入貼圖資料
-    pub fn load_csv(&mut self, path: &str, category: &str) -> Result<()> {
-        let content =
-            fs::read_to_string(path).with_context(|| format!("無法讀取 CSV 檔案: {}", path))?;
-
+    /// 從 CSV 內容載入貼圖資料
+    fn load_csv_content(&mut self, content: &str, category: &str, source_name: &str) -> Result<()> {
         let mut reader = csv::Reader::from_reader(content.as_bytes());
 
         // 取得 header
         let headers = reader
             .headers()
-            .with_context(|| format!("無法讀取 CSV header: {}", path))?;
+            .with_context(|| format!("無法讀取 CSV header: {}", source_name))?;
 
         // 找到需要的欄位索引
         let name_idx = headers
             .iter()
             .position(|h| h == "名稱")
-            .with_context(|| format!("CSV 檔案中找不到「名稱」欄位: {}", path))?;
+            .with_context(|| format!("CSV 檔案中找不到「名稱」欄位: {}", source_name))?;
 
         // 先尋找「圖片」欄位，找不到再找「圖片網址」，最後找「i.imgur」欄位
         let image_url_idx = headers
@@ -73,12 +70,13 @@ impl StickerDatabase {
             .with_context(|| {
                 format!(
                     "CSV 檔案中找不到「圖片」、「圖片網址」或「i.imgur」欄位: {}",
-                    path
+                    source_name
                 )
             })?;
 
         for result in reader.records() {
-            let record = result.with_context(|| format!("解析 CSV 記錄時發生錯誤: {}", path))?;
+            let record =
+                result.with_context(|| format!("解析 CSV 記錄時發生錯誤: {}", source_name))?;
 
             let name = record
                 .get(name_idx)
@@ -102,13 +100,22 @@ impl StickerDatabase {
         Ok(())
     }
 
-    /// 從 JSON 檔案載入貼圖資料
-    pub fn load_json(&mut self, path: &str, category: &str) -> Result<()> {
+    /// 從 CSV 檔案載入貼圖資料
+    pub fn load_csv(&mut self, path: &str, category: &str) -> Result<()> {
         let content =
-            fs::read_to_string(path).with_context(|| format!("無法讀取 JSON 檔案: {}", path))?;
+            fs::read_to_string(path).with_context(|| format!("無法讀取 CSV 檔案: {}", path))?;
+        self.load_csv_content(&content, category, path)
+    }
 
-        let json_data: HashMap<String, String> = serde_json::from_str(&content)
-            .with_context(|| format!("解析 JSON 檔案時發生錯誤: {}", path))?;
+    /// 從 JSON 內容載入貼圖資料
+    fn load_json_content(
+        &mut self,
+        content: &str,
+        category: &str,
+        source_name: &str,
+    ) -> Result<()> {
+        let json_data: HashMap<String, String> = serde_json::from_str(content)
+            .with_context(|| format!("解析 JSON 檔案時發生錯誤: {}", source_name))?;
 
         for (name, image_url) in json_data {
             self.stickers.push(Sticker {
@@ -121,19 +128,72 @@ impl StickerDatabase {
         Ok(())
     }
 
+    /// 從 JSON 檔案載入貼圖資料
+    pub fn load_json(&mut self, path: &str, category: &str) -> Result<()> {
+        let content =
+            fs::read_to_string(path).with_context(|| format!("無法讀取 JSON 檔案: {}", path))?;
+        self.load_json_content(&content, category, path)
+    }
+
+    /// 從 HTTP GET 獲取資料並載入
+    pub async fn load_from_http(
+        &mut self,
+        url: &str,
+        headers: &HashMap<String, String>,
+        format: &crate::config::FileFormat,
+        category: &str,
+    ) -> Result<()> {
+        let client = reqwest::Client::new();
+        let mut request = client.get(url);
+
+        // 添加自定義 headers
+        for (key, value) in headers {
+            request = request.header(key, value);
+        }
+
+        let response = request
+            .send()
+            .await
+            .with_context(|| format!("無法從 URL 獲取資料: {}", url))?;
+
+        let content = response
+            .text()
+            .await
+            .with_context(|| format!("無法讀取 HTTP 回應內容: {}", url))?;
+
+        match format {
+            crate::config::FileFormat::Csv => self.load_csv_content(&content, category, url),
+            crate::config::FileFormat::Json => self.load_json_content(&content, category, url),
+        }
+    }
+
     /// 從配置載入所有貼圖資料
-    pub fn load_from_config(config: &crate::config::StickersConfig) -> Result<Self> {
+    pub async fn load_from_config(config: &crate::config::StickersConfig) -> Result<Self> {
         let mut db = Self::new();
 
         for category_config in &config.categories {
-            for csv_path in &category_config.csv {
-                db.load_csv(csv_path, &category_config.name)
-                    .with_context(|| format!("載入 CSV 檔案失敗: {}", csv_path))?;
-            }
-
-            for json_path in &category_config.json {
-                db.load_json(json_path, &category_config.name)
-                    .with_context(|| format!("載入 JSON 檔案失敗: {}", json_path))?;
+            for source in &category_config.sources {
+                match source {
+                    crate::config::SourceConfig::File { format, path } => match format {
+                        crate::config::FileFormat::Csv => {
+                            db.load_csv(path, &category_config.name)
+                                .with_context(|| format!("載入 CSV 檔案失敗: {}", path))?;
+                        }
+                        crate::config::FileFormat::Json => {
+                            db.load_json(path, &category_config.name)
+                                .with_context(|| format!("載入 JSON 檔案失敗: {}", path))?;
+                        }
+                    },
+                    crate::config::SourceConfig::HttpGet {
+                        format,
+                        url,
+                        headers,
+                    } => {
+                        db.load_from_http(url, headers, format, &category_config.name)
+                            .await
+                            .with_context(|| format!("從 HTTP 載入資料失敗: {}", url))?;
+                    }
+                }
             }
         }
 

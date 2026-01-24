@@ -69,6 +69,7 @@ async fn main() -> Result<()> {
 
     info!("配置載入成功");
     info!("Mattermost URL: {}", config.mattermost.url);
+    info!("Bot Token 長度: {} 字元", config.mattermost.bot_token.len());
 
     // 初始化 Mattermost 客戶端
     let mattermost_client = MattermostClient::new(
@@ -79,17 +80,24 @@ async fn main() -> Result<()> {
     info!("Mattermost 客戶端初始化成功");
 
     // 獲取 bot 自己的 user_id
-    let bot_user = mattermost_client
-        .get_me()
-        .await
-        .context("無法獲取 bot 使用者資訊")?;
+    info!("正在驗證 Bot Token...");
+    let bot_user = mattermost_client.get_me().await.context(
+        "無法獲取 bot 使用者資訊。\n\
+         可能的原因：\n\
+         1. Bot Token 無效或過期\n\
+         2. Bot 帳號被停用\n\
+         3. Mattermost URL 不正確\n\
+         \n\
+         請檢查配置檔案中的 bot_token 是否正確，或在 Mattermost 中重新生成 token。",
+    )?;
     let bot_user_id = bot_user.id.clone();
 
     info!("Bot 使用者: {} ({})", bot_user.username, bot_user_id);
 
     // 載入貼圖資料庫
-    let sticker_database =
-        StickerDatabase::load_from_config(&config.stickers).context("載入貼圖資料庫失敗")?;
+    let sticker_database = StickerDatabase::load_from_config(&config.stickers)
+        .await
+        .context("載入貼圖資料庫失敗")?;
 
     info!("貼圖資料庫載入成功，共 {} 張貼圖", sticker_database.count());
 

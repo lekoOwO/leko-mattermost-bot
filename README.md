@@ -38,15 +38,39 @@ mattermost:
 stickers:
   categories:
     - name: 海綿寶寶
-      csv:
-        - data/sb.csv
-      json:
-        - data/sb.json
+      sources:
+        # 從本地檔案載入
+        - type: file
+          format: csv
+          path: data/sb.csv
+        
+        - type: file
+          format: json
+          path: data/sb.json
+        
+        # 從遠端伺服器透過 HTTP GET 獲取
+        - type: http_get
+          format: json
+          url: https://example.com/stickers.json
+          headers:                      # 可選
+            Authorization: Bearer your-token-here
+            User-Agent: Leko-Bot
 
 admin:                          # 管理員列表（可選）
   - "@username"                 # @開頭代表 username
   - "userid123"                 # 否則為 user_id
 ```
+
+#### 貼圖來源配置說明
+
+**type: file** - 從本地檔案載入
+- `format`: 資料格式，`csv` 或 `json`
+- `path`: 檔案路徑
+
+**type: http_get** - 從遠端 HTTP GET 獲取
+- `format`: 資料格式，`csv` 或 `json`
+- `url`: 遠端 URL（必填）
+- `headers`: 自定義 HTTP headers（可選）
 
 ### 在 Mattermost 設定
 

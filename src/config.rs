@@ -29,10 +29,29 @@ pub struct StickersConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CategoryConfig {
     pub name: String,
-    #[serde(default)]
-    pub csv: Vec<String>,
-    #[serde(default)]
-    pub json: Vec<String>,
+    pub sources: Vec<SourceConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum SourceConfig {
+    File {
+        format: FileFormat,
+        path: String,
+    },
+    HttpGet {
+        format: FileFormat,
+        url: String,
+        #[serde(default)]
+        headers: std::collections::HashMap<String, String>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FileFormat {
+    Csv,
+    Json,
 }
 
 impl Config {
@@ -89,10 +108,13 @@ mattermost:
 stickers:
   categories:
     - name: 測試分類
-      csv:
-        - data/test.csv
-      json:
-        - data/test.json
+      sources:
+        - type: file
+          format: csv
+          path: data/test.csv
+        - type: file
+          format: json
+          path: data/test.json
 admin:
   - "@testuser"
   - "userid123"
@@ -106,8 +128,7 @@ admin:
         assert_eq!(config.mattermost.bot_token, "test_token");
         assert_eq!(config.stickers.categories.len(), 1);
         assert_eq!(config.stickers.categories[0].name, "測試分類");
-        assert_eq!(config.stickers.categories[0].csv.len(), 1);
-        assert_eq!(config.stickers.categories[0].json.len(), 1);
+        assert_eq!(config.stickers.categories[0].sources.len(), 2);
         assert_eq!(config.admin.len(), 2);
 
         // 測試管理員驗證

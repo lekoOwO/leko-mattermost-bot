@@ -109,7 +109,7 @@ admin:
         assert_eq!(config.stickers.categories[0].csv.len(), 1);
         assert_eq!(config.stickers.categories[0].json.len(), 1);
         assert_eq!(config.admin.len(), 2);
-        
+
         // 測試管理員驗證
         assert!(config.is_admin("userid123", "otheruser"));
         assert!(config.is_admin("anyid", "testuser"));

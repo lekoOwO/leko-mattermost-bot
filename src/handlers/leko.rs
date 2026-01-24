@@ -4,9 +4,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
 
-use crate::AppState;
 use super::auth::verify_slash_command_token;
 use super::sticker::handle_sticker_command_impl;
+use crate::AppState;
 
 /// 處理 /leko slash command
 pub async fn handle_leko_command(

@@ -59,7 +59,8 @@ async fn main() -> Result<()> {
     info!("正在啟動 Leko's Mattermost Bot...");
 
     // 確定配置文件路徑
-    let config_path = args.config
+    let config_path = args
+        .config
         .or_else(|| std::env::var("CONFIG_YAML").ok().map(PathBuf::from))
         .unwrap_or_else(|| PathBuf::from("config.yaml"));
 
@@ -83,7 +84,7 @@ async fn main() -> Result<()> {
         .await
         .context("無法獲取 bot 使用者資訊")?;
     let bot_user_id = bot_user.id.clone();
-    
+
     info!("Bot 使用者: {} ({})", bot_user.username, bot_user_id);
 
     // 載入貼圖資料庫

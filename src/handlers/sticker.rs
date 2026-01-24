@@ -4,9 +4,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{error, info};
 
+use super::auth::verify_slash_command_token;
 use crate::AppState;
 use crate::mattermost::{Action, ActionOption, Attachment, Integration};
-use super::auth::verify_slash_command_token;
 
 /// 處理 /sticker slash command
 pub async fn handle_sticker_command(

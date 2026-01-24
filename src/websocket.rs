@@ -114,9 +114,7 @@ async fn connect_and_handle(
     bot_token: &str,
     state: Arc<RwLock<AppState>>,
 ) -> Result<()> {
-    let (ws_stream, _) = connect_async(ws_url)
-        .await
-        .context("WebSocket 連接失敗")?;
+    let (ws_stream, _) = connect_async(ws_url).await.context("WebSocket 連接失敗")?;
 
     info!("WebSocket 連接成功");
 
@@ -216,8 +214,8 @@ async fn handle_websocket_message(text: &str, state: Arc<RwLock<AppState>>) -> R
 
 async fn handle_posted_event(data: &serde_json::Value, state: Arc<RwLock<AppState>>) -> Result<()> {
     // 解析事件資料
-    let event_data: PostedEventData = serde_json::from_value(data.clone())
-        .context("解析 posted 事件資料失敗")?;
+    let event_data: PostedEventData =
+        serde_json::from_value(data.clone()).context("解析 posted 事件資料失敗")?;
 
     // 檢查是否為 Direct Message
     let channel_type = event_data.channel_type.as_deref().unwrap_or("");
@@ -227,8 +225,7 @@ async fn handle_posted_event(data: &serde_json::Value, state: Arc<RwLock<AppStat
 
     // 解析 post 資料
     let post_json = event_data.post.as_deref().unwrap_or("{}");
-    let post: PostData = serde_json::from_str(post_json)
-        .context("解析 post 資料失敗")?;
+    let post: PostData = serde_json::from_str(post_json).context("解析 post 資料失敗")?;
 
     let user_id = post.user_id.as_deref().unwrap_or("");
     let channel_id = post.channel_id.as_deref().unwrap_or("");
@@ -240,12 +237,12 @@ async fn handle_posted_event(data: &serde_json::Value, state: Arc<RwLock<AppStat
 
     // 獲取 bot 自己的 user_id（避免回應自己的訊息）
     let app_state = state.read().await;
-    
+
     // 如果是 bot 自己的訊息，忽略
     if user_id == app_state.bot_user_id {
         return Ok(());
     }
-    
+
     // 獲取使用者資訊
     let user = match app_state.mattermost_client.get_user(user_id).await {
         Ok(u) => u,
@@ -260,7 +257,7 @@ async fn handle_posted_event(data: &serde_json::Value, state: Arc<RwLock<AppStat
     // 檢查是否為管理員
     if !app_state.config.is_admin(user_id, &username) {
         warn!("非管理員嘗試使用 DM: {} ({})", username, user_id);
-        
+
         // 發送警告訊息
         let post = Post {
             id: None,
@@ -273,7 +270,7 @@ async fn handle_posted_event(data: &serde_json::Value, state: Arc<RwLock<AppStat
         if let Err(e) = app_state.mattermost_client.create_post(&post).await {
             error!("發送警告訊息失敗: {}", e);
         }
-        
+
         return Ok(());
     }
 
@@ -306,8 +303,7 @@ async fn handle_posted_event(data: &serde_json::Value, state: Arc<RwLock<AppStat
             drop(app_state);
             format!(
                 "### ℹ️ Bot 狀態\n\n- **貼圖數量**: {} 張\n- **管理員數量**: {} 人\n- **狀態**: 🟢 運行中",
-                sticker_count,
-                admin_count
+                sticker_count, admin_count
             )
         }
         "reload" => {
@@ -329,10 +325,7 @@ async fn handle_posted_event(data: &serde_json::Value, state: Arc<RwLock<AppStat
         _ => {
             // 未知指令
             drop(app_state);
-            format!(
-                "❓ 未知指令: `{}`\n\n輸入 `help` 查看可用指令。",
-                command
-            )
+            format!("❓ 未知指令: `{}`\n\n輸入 `help` 查看可用指令。", command)
         }
     };
 
@@ -348,7 +341,11 @@ async fn handle_posted_event(data: &serde_json::Value, state: Arc<RwLock<AppStat
         props: None,
     };
 
-    if let Err(e) = app_state.mattermost_client.create_post(&response_post).await {
+    if let Err(e) = app_state
+        .mattermost_client
+        .create_post(&response_post)
+        .await
+    {
         error!("發送回應訊息失敗: {}", e);
     }
 
@@ -384,25 +381,25 @@ fn get_help_message() -> String {
 /// 處理重新載入配置
 async fn handle_reload_config(state: Arc<RwLock<AppState>>) -> Result<String> {
     info!("開始重新載入配置...");
-    
+
     let mut app_state = state.write().await;
-    
+
     // 讀取配置文件路徑
     let config_path = app_state.config_path.clone();
-    
+
     // 重新載入配置
-    let new_config = crate::config::Config::from_path(&config_path)
-        .context("讀取配置檔案失敗")?;
-    
+    let new_config = crate::config::Config::from_path(&config_path).context("讀取配置檔案失敗")?;
+
     info!("配置檔案讀取成功");
-    
+
     // 重新載入貼圖資料庫
-    let new_sticker_database = crate::sticker::StickerDatabase::load_from_config(&new_config.stickers)
-        .context("載入貼圖資料庫失敗")?;
-    
+    let new_sticker_database =
+        crate::sticker::StickerDatabase::load_from_config(&new_config.stickers)
+            .context("載入貼圖資料庫失敗")?;
+
     let sticker_count = new_sticker_database.count();
     info!("貼圖資料庫重新載入成功，共 {} 張貼圖", sticker_count);
-    
+
     // 更新 admin 列表
     let admin_count = new_config.admin.len();
     if !new_config.admin.is_empty() {
@@ -410,14 +407,14 @@ async fn handle_reload_config(state: Arc<RwLock<AppState>>) -> Result<String> {
     } else {
         info!("未設定管理員");
     }
-    
+
     // 更新狀態（保留 mattermost_client 和 bot_user_id）
     app_state.config.stickers = new_config.stickers;
     app_state.config.admin = new_config.admin;
     app_state.sticker_database = new_sticker_database;
-    
+
     info!("配置重新載入完成");
-    
+
     Ok(format!(
         "### ✅ 配置重新載入成功\n\n- **貼圖數量**: {} 張\n- **管理員數量**: {} 人\n- **配置檔案**: `{}`",
         sticker_count,
@@ -429,19 +426,19 @@ async fn handle_reload_config(state: Arc<RwLock<AppState>>) -> Result<String> {
 /// 處理貼圖統計資訊
 async fn handle_sticker_stats(state: Arc<RwLock<AppState>>) -> String {
     let app_state = state.read().await;
-    
+
     // 取得統計資訊
     let total_count = app_state.sticker_database.get_total_count();
     let category_stats = app_state.sticker_database.get_category_stats();
-    
+
     // 排序分類名稱
     let mut categories: Vec<_> = category_stats.iter().collect();
     categories.sort_by(|a, b| a.0.cmp(b.0));
-    
+
     // 建立訊息
     let mut message = String::from("### 📊 貼圖庫統計\n\n");
     message.push_str(&format!("**總計**: {} 張貼圖\n\n", total_count));
-    
+
     if categories.is_empty() {
         message.push_str("⚠️ 目前沒有任何貼圖資料。\n");
     } else {
@@ -450,6 +447,6 @@ async fn handle_sticker_stats(state: Arc<RwLock<AppState>>) -> String {
             message.push_str(&format!("- **{}**: {} 張\n", category, count));
         }
     }
-    
+
     message
 }

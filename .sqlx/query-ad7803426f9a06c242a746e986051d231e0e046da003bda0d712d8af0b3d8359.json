@@ -1,0 +1,80 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, group_buy_id, registrar_id, registrar_username,\n                    buyer_id, buyer_username, item_name, quantity,\n                    original_quantity, unit_price, created_at\n             FROM group_buy_orders\n             WHERE group_buy_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "group_buy_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "registrar_id",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "registrar_username",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "buyer_id",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "buyer_username",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "item_name",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "quantity",
+        "ordinal": 7,
+        "type_info": "Integer"
+      },
+      {
+        "name": "original_quantity",
+        "ordinal": 8,
+        "type_info": "Integer"
+      },
+      {
+        "name": "unit_price",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at",
+        "ordinal": 10,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "ad7803426f9a06c242a746e986051d231e0e046da003bda0d712d8af0b3d8359"
+}

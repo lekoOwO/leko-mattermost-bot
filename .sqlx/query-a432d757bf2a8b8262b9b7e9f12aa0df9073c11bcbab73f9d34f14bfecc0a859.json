@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE group_buys \n             SET items = ?, version = version + 1, updated_at = ?\n             WHERE id = ? AND version = ? AND status = 'active'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "a432d757bf2a8b8262b9b7e9f12aa0df9073c11bcbab73f9d34f14bfecc0a859"
+}

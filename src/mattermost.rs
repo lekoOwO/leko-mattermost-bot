@@ -90,7 +90,6 @@ pub struct ActionRequest {
     #[serde(default)]
     #[allow(dead_code)]
     pub trigger_id: Option<String>,
-    #[serde(default)]
     pub context: serde_json::Value,
 }
 
@@ -287,16 +286,33 @@ impl MattermostClient {
         channel_id: &str,
         user_id: &str,
         message: &str,
+        root_id: Option<&str>,
     ) -> Result<()> {
+        use tracing::info;
+
         let url = format!("{}/api/v4/posts/ephemeral", self.base_url);
+
+        let mut post = serde_json::json!({
+            "channel_id": channel_id,
+            "message": message
+        });
+
+        // 如果有 root_id，加入到 post 中
+        if let Some(rid) = root_id {
+            post["root_id"] = serde_json::json!(rid);
+        }
 
         let payload = serde_json::json!({
             "user_id": user_id,
-            "post": {
-                "channel_id": channel_id,
-                "message": message
-            }
+            "post": post
         });
+
+        info!("發送 ephemeral 訊息:");
+        info!("  URL: {}", url);
+        info!("  channel_id: {}", channel_id);
+        info!("  user_id: {}", user_id);
+        info!("  root_id: {:?}", root_id);
+        info!("  message 長度: {} 字元", message.len());
 
         let response = self
             .client
@@ -306,12 +322,16 @@ impl MattermostClient {
             .await
             .context("發送臨時訊息失敗")?;
 
-        if !response.status().is_success() {
-            let status = response.status();
+        let status = response.status();
+        info!("  回應狀態: {}", status);
+
+        if !status.is_success() {
             let text = response.text().await.unwrap_or_default();
+            info!("  錯誤內容: {}", text);
             anyhow::bail!("發送臨時訊息失敗: {} - {}", status, text);
         }
 
+        info!("  成功發送 ephemeral 訊息");
         Ok(())
     }
 
@@ -401,6 +421,157 @@ impl MattermostClient {
         let channel: Channel = response.json().await.context("解析頻道資訊失敗")?;
         Ok(channel)
     }
+
+    /// 建立貼文（帶回傳）
+    pub async fn create_post_simple(
+        &self,
+        channel_id: &str,
+        message: &str,
+        props: Option<serde_json::Value>,
+    ) -> Result<PostResponse> {
+        let url = format!("{}/api/v4/posts", self.base_url);
+
+        let mut post = serde_json::json!({
+            "channel_id": channel_id,
+            "message": message,
+        });
+
+        if let Some(p) = props {
+            post["props"] = p;
+        }
+
+        let response = self
+            .client
+            .post(&url)
+            .json(&post)
+            .send()
+            .await
+            .context("建立貼文失敗")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            anyhow::bail!("建立貼文失敗: {} - {}", status, text);
+        }
+
+        let post_response: PostResponse = response.json().await.context("解析貼文回應失敗")?;
+        Ok(post_response)
+    }
+
+    /// 開啟 Interactive Dialog
+    #[allow(clippy::too_many_arguments)]
+    pub async fn open_dialog(
+        &self,
+        trigger_id: &str,
+        url: &str,
+        title: &str,
+        elements: &[DialogElement],
+        submit_label: Option<&str>,
+        introduction_text: Option<&str>,
+        state: Option<&str>,
+    ) -> Result<()> {
+        let api_url = format!("{}/api/v4/actions/dialogs/open", self.base_url);
+
+        let dialog = Dialog {
+            trigger_id: trigger_id.to_string(),
+            url: url.to_string(),
+            dialog: DialogContent {
+                callback_id: "dialog_callback".to_string(),
+                title: title.to_string(),
+                elements: elements.to_vec(),
+                submit_label: submit_label.unwrap_or("送出").to_string(),
+                notify_on_cancel: false,
+                introduction_text: introduction_text.map(|s| s.to_string()),
+                state: state.map(|s| s.to_string()),
+            },
+        };
+
+        let response = self
+            .client
+            .post(&api_url)
+            .json(&dialog)
+            .send()
+            .await
+            .context("開啟對話框失敗")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            anyhow::bail!("開啟對話框失敗: {} - {}", status, text);
+        }
+
+        Ok(())
+    }
+}
+
+/// 貼文回應
+#[derive(Debug, Deserialize)]
+pub struct PostResponse {
+    pub id: String,
+    pub channel_id: String,
+}
+
+/// Interactive Dialog 結構
+#[derive(Debug, Serialize)]
+struct Dialog {
+    trigger_id: String,
+    url: String,
+    dialog: DialogContent,
+}
+
+#[derive(Debug, Serialize)]
+struct DialogContent {
+    callback_id: String,
+    title: String,
+    elements: Vec<DialogElement>,
+    submit_label: String,
+    notify_on_cancel: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    introduction_text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    state: Option<String>,
+}
+
+/// Dialog 元素
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DialogElement {
+    pub display_name: String,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub element_type: DialogElementType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub placeholder: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub help_text: Option<String>,
+    pub optional: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_length: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_length: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data_source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub options: Option<Vec<DialogOption>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subtype: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DialogElementType {
+    Text,
+    Textarea,
+    Select,
+    Bool,
+    Radio,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DialogOption {
+    pub text: String,
+    pub value: String,
 }
 
 #[cfg(test)]

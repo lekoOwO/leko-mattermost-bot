@@ -181,11 +181,11 @@ async fn handle_websocket_message(text: &str, state: Arc<RwLock<AppState>>) -> R
     };
 
     // 處理認證回應
-    if let Some(status) = &event.status {
-        if status == "OK" {
-            info!("WebSocket 認證成功");
-            return Ok(());
-        }
+    if let Some(status) = &event.status
+        && status == "OK"
+    {
+        info!("WebSocket 認證成功");
+        return Ok(());
     }
 
     // 如果沒有 event_type，忽略

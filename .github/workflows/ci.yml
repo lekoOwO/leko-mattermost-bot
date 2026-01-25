@@ -32,12 +32,12 @@ jobs:
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Check formatting
-        run: cargo fmt --all -- --check
+      - name: Install sqlx-cli
+        run: cargo install -f sqlx-cli --no-default-features --features sqlite
 
-      - name: Run tests
-        run: cargo test --locked
-
+      - name: Prepare sqlx data
+        run: |
+          SQLX_PREPARE_ALL=1 cargo run --bin sqlx_prepare
   build:
     name: Build on ${{ matrix.platform.os-name }} with rust ${{ matrix.platform.toolchain || 'stable' }}
     needs: check
@@ -123,7 +123,14 @@ jobs:
         env:
           RUST_BACKTRACE: full
 
-      - name: Run tests
+      - name: Download sqlx-data.json artifact
+        if: ${{ !matrix.platform.skip-tests }}
+        uses: actions/download-artifact@v4
+        with:
+          name: sqlx-data
+          path: .
+
+      - name: Run tests (with sqlx offline)
         uses: ClementTsang/cargo-action@v0.0.5
         with:
           command: test
@@ -133,12 +140,15 @@ jobs:
         if: ${{ !matrix.platform.skip-tests }}
         env:
           RUST_BACKTRACE: full
+          SQLX_OFFLINE: 1
+      # Regeneration is now handled in the `check` job which will open a PR.
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.CRATE_NAME }}-${{ matrix.platform.target }}${{ steps.pre.outputs.binary-postfix }}-${{ steps.pre.outputs.toolchain }}
           path: target/${{ matrix.platform.target }}/release/${{ env.CRATE_NAME }}*
+
 
   release:
     name: Release

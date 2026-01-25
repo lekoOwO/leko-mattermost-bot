@@ -16,9 +16,19 @@ thiserror = "2.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 warp = { version = "0.4", features = ["server"] }
+url = "2.5"
 urlencoding = "2.1"
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
 futures-util = "0.3"
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid", "macros"] }
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.11", features = ["v4", "serde"] }
+rust_decimal = { version = "1.36", features = ["serde"] }
+rust_decimal_macros = "1.36"
+
+[[bin]]
+name = "sqlx_prepare"
+path = "scripts/sqlx_prepare.rs"
 
 [dev-dependencies]
 mockito = "1.7"

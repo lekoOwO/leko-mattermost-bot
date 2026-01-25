@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO group_buys (\n                id, creator_id, creator_username, channel_id, post_id,\n                merchant_name, description, metadata, items, status,\n                version, created_at, updated_at\n             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 13
+    },
+    "nullable": []
+  },
+  "hash": "123dd1701a2adf93247557ca9e97b84043b366d1e4cfa41a2a0dbf547a3e7868"
+}

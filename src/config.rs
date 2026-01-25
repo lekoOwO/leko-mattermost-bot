@@ -9,6 +9,12 @@ pub struct Config {
     pub stickers: StickersConfig,
     #[serde(default)]
     pub admin: Vec<String>,
+    #[serde(default = "default_database_url")]
+    pub database_url: String,
+}
+
+fn default_database_url() -> String {
+    "sqlite::memory:".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,9 +22,19 @@ pub struct MattermostConfig {
     pub url: String,
     pub bot_token: String,
     #[serde(default)]
-    pub slash_command_token: Option<String>,
+    pub slash_command_tokens: SlashCommandTokens,
     #[serde(default)]
     pub bot_callback_url: Option<String>, // Bot 服務器的公開 URL，用於 dialog callback
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SlashCommandTokens {
+    #[serde(default)]
+    pub group_buy: Option<String>,
+    #[serde(default)]
+    pub leko: Option<String>,
+    #[serde(default)]
+    pub stickers: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

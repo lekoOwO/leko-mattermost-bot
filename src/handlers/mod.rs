@@ -2,12 +2,18 @@
 
 mod actions;
 mod auth;
+mod group_buy;
 mod leko;
 mod sticker;
 
 // 重新導出公開的處理器函數
 pub use actions::handle_action;
 pub use auth::UnauthorizedError;
+pub use group_buy::{
+    handle_adjust_shortage_dialog, handle_cancel_register_dialog, handle_create_dialog,
+    handle_edit_items_dialog, handle_group_buy_action, handle_group_buy_command,
+    handle_register_dialog,
+};
 pub use leko::handle_leko_command;
 pub use sticker::handle_sticker_command;
 

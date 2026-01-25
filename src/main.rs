@@ -1,19 +1,30 @@
 mod config;
+mod database;
 mod handlers;
 mod mattermost;
 mod sticker;
+#[cfg(test)]
+mod test_utils;
 mod websocket;
 
 use anyhow::{Context, Result};
 use clap::Parser;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{error, info};
+use url::form_urlencoded;
 use warp::Filter;
 
 use config::Config;
-use handlers::{handle_action, handle_leko_command, handle_rejection, handle_sticker_command};
+use database::Database;
+use handlers::{
+    handle_action, handle_adjust_shortage_dialog, handle_cancel_register_dialog,
+    handle_create_dialog, handle_edit_items_dialog, handle_group_buy_action,
+    handle_group_buy_command, handle_leko_command, handle_register_dialog, handle_rejection,
+    handle_sticker_command,
+};
 use mattermost::MattermostClient;
 use sticker::StickerDatabase;
 use websocket::start_websocket;
@@ -39,6 +50,7 @@ pub struct AppState {
     pub config: Config,
     pub mattermost_client: MattermostClient,
     pub sticker_database: StickerDatabase,
+    pub database: Database,
     pub bot_user_id: String,
     pub config_path: PathBuf,
 }
@@ -101,6 +113,13 @@ async fn main() -> Result<()> {
 
     info!("貼圖資料庫載入成功，共 {} 張貼圖", sticker_database.count());
 
+    // 初始化 SQLite 資料庫
+    let database = Database::new(&config.database_url)
+        .await
+        .context("初始化資料庫失敗")?;
+
+    info!("SQLite 資料庫初始化成功: {}", config.database_url);
+
     // 顯示管理員配置
     if !config.admin.is_empty() {
         info!("管理員列表: {:?}", config.admin);
@@ -113,6 +132,7 @@ async fn main() -> Result<()> {
         config,
         mattermost_client,
         sticker_database,
+        database,
         bot_user_id,
         config_path,
     }));
@@ -151,6 +171,128 @@ async fn start_server(state: Arc<RwLock<AppState>>, addr: &str) -> Result<()> {
         .and(with_state(state.clone()))
         .and_then(handle_leko_command);
 
+    // /group_buy slash command 路由
+    let group_buy_command = warp::post()
+        .and(warp::path("group_buy"))
+        .and(warp::path::end())
+        .and(warp::body::form())
+        .and(with_state(state.clone()))
+        .and_then(handle_group_buy_command);
+
+    // 團購 Dialog 處理路由
+    let group_buy_dialog_create = warp::post()
+        .and(warp::path("api"))
+        .and(warp::path("v1"))
+        .and(warp::path("group_buy"))
+        .and(warp::path("dialog"))
+        .and(warp::path("create"))
+        .and(warp::path::end())
+        .and(warp::header::optional::<String>("content-type"))
+        .and(warp::body::content_length_limit(1024 * 32))
+        .and(warp::body::bytes())
+        .and(with_state(state.clone()))
+        .and_then(
+            |content_type: Option<String>, body: warp::hyper::body::Bytes, state| async move {
+                info!("收到 dialog 請求，Content-Type: {:?}", content_type);
+                // 將 bytes 解析為 form data
+                let body_str = String::from_utf8_lossy(&body);
+                info!("Body: {}", &body_str[..body_str.len().min(200)]);
+
+                let form: HashMap<String, String> = form_urlencoded::parse(body_str.as_bytes())
+                    .into_owned()
+                    .collect();
+
+                handle_create_dialog(form, state).await
+            },
+        );
+
+    let group_buy_dialog_edit_items = warp::post()
+        .and(warp::path("api"))
+        .and(warp::path("v1"))
+        .and(warp::path("group_buy"))
+        .and(warp::path("dialog"))
+        .and(warp::path("edit_items"))
+        .and(warp::path::end())
+        .and(warp::body::content_length_limit(1024 * 32))
+        .and(warp::body::bytes())
+        .and(with_state(state.clone()))
+        .and_then(|body: warp::hyper::body::Bytes, state| async move {
+            let body_str = String::from_utf8_lossy(&body);
+            let form: HashMap<String, String> = form_urlencoded::parse(body_str.as_bytes())
+                .into_owned()
+                .collect();
+            handle_edit_items_dialog(form, state).await
+        });
+
+    let group_buy_dialog_register = warp::post()
+        .and(warp::path("api"))
+        .and(warp::path("v1"))
+        .and(warp::path("group_buy"))
+        .and(warp::path("dialog"))
+        .and(warp::path("register"))
+        .and(warp::path::end())
+        .and(warp::body::content_length_limit(1024 * 32))
+        .and(warp::body::bytes())
+        .and(with_state(state.clone()))
+        .and_then(|body: warp::hyper::body::Bytes, state| async move {
+            let body_str = String::from_utf8_lossy(&body);
+            let form: HashMap<String, String> = form_urlencoded::parse(body_str.as_bytes())
+                .into_owned()
+                .collect();
+            handle_register_dialog(form, state).await
+        });
+
+    let group_buy_dialog_cancel_register = warp::post()
+        .and(warp::path("api"))
+        .and(warp::path("v1"))
+        .and(warp::path("group_buy"))
+        .and(warp::path("dialog"))
+        .and(warp::path("cancel_register"))
+        .and(warp::path::end())
+        .and(warp::body::content_length_limit(1024 * 32))
+        .and(warp::body::bytes())
+        .and(with_state(state.clone()))
+        .and_then(|body: warp::hyper::body::Bytes, state| async move {
+            let body_str = String::from_utf8_lossy(&body);
+            let form: HashMap<String, String> = form_urlencoded::parse(body_str.as_bytes())
+                .into_owned()
+                .collect();
+            handle_cancel_register_dialog(form, state).await
+        });
+
+    let group_buy_dialog_adjust_shortage = warp::post()
+        .and(warp::path("api"))
+        .and(warp::path("v1"))
+        .and(warp::path("group_buy"))
+        .and(warp::path("dialog"))
+        .and(warp::path("adjust_shortage"))
+        .and(warp::path::end())
+        .and(warp::body::content_length_limit(1024 * 32))
+        .and(warp::body::bytes())
+        .and(with_state(state.clone()))
+        .and_then(|body: warp::hyper::body::Bytes, state| async move {
+            let body_str = String::from_utf8_lossy(&body);
+            let form: HashMap<String, String> = form_urlencoded::parse(body_str.as_bytes())
+                .into_owned()
+                .collect();
+            handle_adjust_shortage_dialog(form, state).await
+        });
+
+    // 團購按鈕 Action 處理路由
+    let group_buy_action = warp::post()
+        .and(warp::path("api"))
+        .and(warp::path("v1"))
+        .and(warp::path("group_buy"))
+        .and(warp::path("action"))
+        .and(warp::path::param::<String>()) // 捕獲 action 名稱（如 edit_items, register 等）
+        .and(warp::path::end())
+        .and(warp::body::json())
+        .and(with_state(state.clone()))
+        .and_then(|_action_name: String, action_req, state| {
+            // action_name 不使用，因為 handle_group_buy_action 會從 action_req.context.action 中取得
+            handle_group_buy_action(action_req, state)
+        });
+
     // Interactive Message Action 處理器
     let action_handler = warp::post()
         .and(warp::path("action"))
@@ -177,7 +319,14 @@ async fn start_server(state: Arc<RwLock<AppState>>, addr: &str) -> Result<()> {
     });
 
     let routes = health
+        .or(group_buy_dialog_create)
+        .or(group_buy_dialog_edit_items)
+        .or(group_buy_dialog_register)
+        .or(group_buy_dialog_cancel_register)
+        .or(group_buy_dialog_adjust_shortage)
+        .or(group_buy_action)
         .or(action_handler)
+        .or(group_buy_command)
         .or(leko_command)
         .or(sticker_command)
         .recover(handle_rejection)

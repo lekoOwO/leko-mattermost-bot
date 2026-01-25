@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM group_buy_orders WHERE group_buy_id = ? AND buyer_id = ? AND item_name = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "d9706d7327ab16c432bd8b94e9a5bd4fb6aa630e529199a123c3d214d8b76b07"
+}

@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, buyer_id, buyer_username, quantity, original_quantity\n             FROM group_buy_orders\n             WHERE group_buy_id = ? AND item_name = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "buyer_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "buyer_username",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "quantity",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "original_quantity",
+        "ordinal": 4,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "84b8269ca531b107e0da80ea869475a290e31d304bec052a1085300e731abbac"
+}

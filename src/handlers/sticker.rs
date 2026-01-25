@@ -18,7 +18,7 @@ pub async fn handle_sticker_command(
     info!("完整表單內容: {:?}", form);
 
     // 驗證 slash command token
-    verify_slash_command_token(&form, &state).await?;
+    verify_slash_command_token(&form, &state, "stickers").await?;
 
     handle_sticker_command_impl(form, state).await
 }

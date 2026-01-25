@@ -197,6 +197,20 @@ cargo test
 RUST_LOG=debug cargo run -- -c data/config.yaml
 ```
 
+### SQLx offline 查詢快取
+
+此專案使用 `sqlx` 的編譯時查詢宏以提升安全性與可靠性。請參閱 `DEV.md` 的「SQLx offline 查詢快取 (.sqlx)」段落了解如何使用專案內的 `sqlx_prepare` helper 來生成 `.sqlx`。常見命令：
+
+```bash
+# 只為主二進位檔準備（快速）
+cargo run --bin sqlx_prepare
+
+# 為所有 target（包含 tests）準備（CI/完整本機準備）
+SQLX_PREPARE_ALL=1 cargo run --bin sqlx_prepare
+```
+
+將產生的 `.sqlx` 加入版本控制可讓其他開發者和 CI 在不需連線真實 DB 的情況下正確編譯。 
+
 ## 專案結構
 
 ```

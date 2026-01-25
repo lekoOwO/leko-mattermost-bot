@@ -141,6 +141,27 @@ cargo build --release       # Release 版本
 ```bash
 cargo test                  # 執行所有測試
 cargo test -- --nocapture   # 顯示測試輸出
+
+### SQLx offline 查詢快取 (.sqlx)
+
+此專案使用 `sqlx` 的編譯時查詢宏（`query!` / `query_as!` / `query_scalar!`），為了在沒有線上 DB 的情況下也能編譯，需要生成離線查詢快取（`.sqlx`）。專案提供一個 helper binary：`sqlx_prepare`，它會在暫存 SQLite 檔案中套用 `src/schema.sql`，並執行 `cargo sqlx prepare` 以產生 `.sqlx` 檔案。
+
+使用方式：
+
+```bash
+# 只為主二進位檔準備（快速）
+cargo run --bin sqlx_prepare
+
+# 為所有 target（包含 tests）準備（CI/完整本機準備）
+SQLX_PREPARE_ALL=1 cargo run --bin sqlx_prepare
+```
+
+說明：
+- `sqlx_prepare` 會建立一個隨機的臨時 SQLite 檔案，套用 `src/schema.sql`，執行 `cargo sqlx prepare`，最後刪除臨時檔案。
+- 在 CI 中建議在測試前呼叫 `SQLX_PREPARE_ALL=1 cargo run --bin sqlx_prepare`，並將產生的 `.sqlx` 檔案加入版本控制（將 `.sqlx` 加到 repo）。
+- 某些動態或遷移相關的 DDL 會保留為動態 `sqlx::query(...)`，這類語句無法用宏在編譯時檢查，故不會出現在 `.sqlx` 中。
+
+如果你希望測試不依賴 `.sqlx`，可以在測試程式中使用動態 `sqlx::query` / `.bind()` 的形式來避免強依賴（本專案在少數測試處理上採取了此做法）。
 ```
 
 ### 執行

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO shortage_adjustments (\n                        group_buy_id, order_id, adjuster_id, adjuster_username,\n                        item_name, buyer_id, buyer_username, old_quantity, new_quantity, created_at\n                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 10
+    },
+    "nullable": []
+  },
+  "hash": "53efca410807f1bbc96ffd5c005864b8ca5a73a4476bf5a5cfc954a2db4573fb"
+}

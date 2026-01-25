@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO group_buy_logs (group_buy_id, user_id, username, action, details, created_at)\n             VALUES (?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "5d9a732d2624c1c128ac56f840d5c26cbed7d89cd67dcc86bd8fa029b6cdfc28"
+}

@@ -65,6 +65,11 @@ async fn main() -> Result<()> {
         )
         .init();
 
+    // We standardize on the aws-lc-rs crypto provider at compile time via cargo
+    // features (sqlx uses `tls-rustls-aws-lc-rs` and reqwest/hyper-rustls also
+    // select aws-lc). That avoids runtime ambiguity in rustls, so no manual
+    // install is required here.
+
     // 解析命令列參數
     let args = Args::parse();
 

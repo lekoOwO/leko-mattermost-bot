@@ -59,3 +59,20 @@ CREATE TABLE IF NOT EXISTS shortage_adjustments (
 CREATE INDEX IF NOT EXISTS idx_orders_group_buy_id ON group_buy_orders(group_buy_id);
 CREATE INDEX IF NOT EXISTS idx_orders_buyer_id ON group_buy_orders(buyer_id);
 CREATE INDEX IF NOT EXISTS idx_logs_group_buy_id ON group_buy_logs(group_buy_id);
+
+-- Stickers table: store sticker metadata to avoid loading all stickers into memory
+CREATE TABLE IF NOT EXISTS stickers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    image_url TEXT NOT NULL UNIQUE,
+    category TEXT NOT NULL,
+    url_hash TEXT,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_stickers_category ON stickers(category);
+CREATE INDEX IF NOT EXISTS idx_stickers_url_hash ON stickers(url_hash);
+
+-- FTS5 virtual table for sticker name search. We populate this manually when inserting/replacing
+-- stickers. We store ngram-like tokens in `name_ngrams` to improve Chinese search support.
+-- (FTS removed) If full-text features are needed later, consider adding an FTS table

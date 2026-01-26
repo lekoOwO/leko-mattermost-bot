@@ -36,18 +36,32 @@ pub async fn handle_sticker_command_impl(
     info!("搜尋關鍵字: '{}', 使用者: {}", text, user_name);
 
     let app_state = state.read().await;
+    // clone DB-backed sticker database before awaiting
+    let sticker_db = app_state.sticker_database.clone();
+    let mattermost_url = app_state.config.mattermost.url.clone();
+    let callback_url = app_state
+        .config
+        .mattermost
+        .bot_callback_url
+        .as_ref()
+        .map(|url| format!("{}/action", url.trim_end_matches('/')))
+        .unwrap_or_else(|| "http://localhost/action".to_string());
+    drop(app_state);
 
     // 搜尋貼圖（不限分類）
-    let stickers = app_state
-        .sticker_database
-        .search(&text, None)
-        .into_iter()
-        .take(25)
-        .collect::<Vec<_>>();
+    let stickers = match sticker_db.search_async(&text, None).await {
+        Ok(v) => v.into_iter().take(25).collect::<Vec<_>>(),
+        Err(e) => {
+            error!("搜尋貼圖失敗: {}", e);
+            return Ok(warp::reply::json(&serde_json::json!({
+                "response_type": "ephemeral",
+                "text": "搜尋貼圖失敗，請稍後再試"
+            })));
+        }
+    };
 
     if stickers.is_empty() {
         // 沒有找到貼圖
-        drop(app_state);
         let message = if text.is_empty() {
             "沒有可用的貼圖".to_string()
         } else {
@@ -70,15 +84,6 @@ pub async fn handle_sticker_command_impl(
         .collect();
 
     let stickers_count = sticker_options.len();
-
-    // 取得 callback URL
-    let callback_url = app_state
-        .config
-        .mattermost
-        .bot_callback_url
-        .as_ref()
-        .map(|url| format!("{}/action", url.trim_end_matches('/')))
-        .unwrap_or_else(|| "http://localhost/action".to_string());
 
     // 建立 Interactive Message
     let attachment = Attachment {
@@ -128,10 +133,6 @@ pub async fn handle_sticker_command_impl(
             },
         ]),
     };
-
-    // 取得 Mattermost URL 用於生成 icon_url
-    let mattermost_url = app_state.config.mattermost.url.clone();
-    drop(app_state);
 
     // 透過 response_url 發送 Interactive Message
     let response_payload = serde_json::json!({

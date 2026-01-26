@@ -298,9 +298,17 @@ async fn handle_posted_event(data: &serde_json::Value, state: Arc<RwLock<AppStat
         }
         "status" | "狀態" => {
             // 顯示狀態
-            let sticker_count = app_state.sticker_database.count();
+            let sticker_db = app_state.sticker_database.clone();
             let admin_count = app_state.config.admin.len();
             drop(app_state);
+            let sticker_count = match sticker_db.count().await {
+                Ok(c) => c,
+                Err(e) => {
+                    warn!("無法取得貼圖數量: {}", e);
+                    0
+                }
+            };
+
             format!(
                 "### ℹ️ Bot 狀態\n\n- **貼圖數量**: {} 張\n- **管理員數量**: {} 人\n- **狀態**: 🟢 運行中",
                 sticker_count, admin_count
@@ -392,13 +400,21 @@ async fn handle_reload_config(state: Arc<RwLock<AppState>>) -> Result<String> {
 
     info!("配置檔案讀取成功");
 
-    // 重新載入貼圖資料庫
-    let new_sticker_database =
-        crate::sticker::StickerDatabase::load_from_config(&new_config.stickers)
-            .await
-            .context("載入貼圖資料庫失敗")?;
+    // 重新載入貼圖資料庫 into existing SQLite database
+    let new_sticker_database = crate::sticker::StickerDatabase::load_from_config(
+        &app_state.database,
+        &new_config.stickers,
+    )
+    .await
+    .context("載入貼圖資料庫失敗")?;
 
-    let sticker_count = new_sticker_database.count();
+    let sticker_count = match new_sticker_database.count().await {
+        Ok(c) => c,
+        Err(e) => {
+            warn!("無法取得貼圖數量: {}", e);
+            0
+        }
+    };
     info!("貼圖資料庫重新載入成功，共 {} 張貼圖", sticker_count);
 
     // 更新 admin 列表
@@ -427,10 +443,25 @@ async fn handle_reload_config(state: Arc<RwLock<AppState>>) -> Result<String> {
 /// 處理貼圖統計資訊
 async fn handle_sticker_stats(state: Arc<RwLock<AppState>>) -> String {
     let app_state = state.read().await;
+    let sticker_db = app_state.sticker_database.clone();
+    drop(app_state);
 
     // 取得統計資訊
-    let total_count = app_state.sticker_database.get_total_count();
-    let category_stats = app_state.sticker_database.get_category_stats();
+    let total_count = match sticker_db.get_total_count().await {
+        Ok(c) => c,
+        Err(e) => {
+            warn!("無法取得貼圖總數: {}", e);
+            0
+        }
+    };
+
+    let category_stats = match sticker_db.get_category_stats().await {
+        Ok(m) => m,
+        Err(e) => {
+            warn!("無法取得分類統計: {}", e);
+            std::collections::HashMap::new()
+        }
+    };
 
     // 排序分類名稱
     let mut categories: Vec<_> = category_stats.iter().collect();

@@ -111,19 +111,23 @@ async fn main() -> Result<()> {
 
     info!("Bot 使用者: {} ({})", bot_user.username, bot_user_id);
 
-    // 載入貼圖資料庫
-    let sticker_database = StickerDatabase::load_from_config(&config.stickers)
-        .await
-        .context("載入貼圖資料庫失敗")?;
-
-    info!("貼圖資料庫載入成功，共 {} 張貼圖", sticker_database.count());
-
     // 初始化 SQLite 資料庫
     let database = Database::new(&config.database_url)
         .await
         .context("初始化資料庫失敗")?;
 
     info!("SQLite 資料庫初始化成功: {}", config.database_url);
+
+    // 載入貼圖資料庫並寫入 SQLite（避免把所有貼圖緩存在記憶體）
+    let sticker_database = StickerDatabase::load_from_config(&database, &config.stickers)
+        .await
+        .context("載入貼圖資料庫失敗")?;
+
+    let sticker_count = match sticker_database.count().await {
+        Ok(c) => c,
+        Err(_) => 0,
+    };
+    info!("貼圖資料庫載入成功，共 {} 張貼圖", sticker_count);
 
     // 顯示管理員配置
     if !config.admin.is_empty() {

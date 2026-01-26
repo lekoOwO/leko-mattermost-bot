@@ -104,18 +104,29 @@ async fn handle_select_sticker(
         .unwrap_or("");
 
     let app_state = state.read().await;
+    let sticker_db = app_state.sticker_database.clone();
+    let callback_url = app_state
+        .config
+        .mattermost
+        .bot_callback_url
+        .as_ref()
+        .map(|url| format!("{}/action", url.trim_end_matches('/')))
+        .unwrap_or_else(|| "http://localhost/action".to_string());
+    let mattermost_url = app_state.config.mattermost.url.clone();
+    drop(app_state);
 
-    // 重新搜尋貼圖以取得選項列表（索引是搜尋結果中的索引）
-    let stickers = app_state
-        .sticker_database
-        .search(keyword, None)
-        .into_iter()
-        .take(25)
-        .collect::<Vec<_>>();
+    let stickers = match sticker_db.search_async(keyword, None).await {
+        Ok(v) => v.into_iter().take(25).collect::<Vec<_>>(),
+        Err(e) => {
+            error!("重新搜尋貼圖失敗: {}", e);
+            return Ok(warp::reply::json(&serde_json::json!({
+                "ephemeral_text": "搜尋貼圖失敗，請稍後再試"
+            })));
+        }
+    };
 
     let Some(sticker) = stickers.get(sticker_index) else {
         error!("找不到貼圖索引: {}", sticker_index);
-        drop(app_state);
         return Ok(warp::reply::json(&serde_json::json!({
             "ephemeral_text": "找不到指定的貼圖"
         })));
@@ -125,18 +136,6 @@ async fn handle_select_sticker(
         "使用者選擇了貼圖: {} (搜尋結果索引: {})",
         sticker.name, sticker_index
     );
-
-    // 取得 callback URL
-    let callback_url = app_state
-        .config
-        .mattermost
-        .bot_callback_url
-        .as_ref()
-        .map(|url| format!("{}/action", url.trim_end_matches('/')))
-        .unwrap_or_else(|| "http://localhost/action".to_string());
-
-    // 取得 Mattermost URL 以生成 icon_url
-    let mattermost_url = app_state.config.mattermost.url.clone();
 
     let sticker_options: Vec<ActionOption> = stickers
         .iter()
@@ -151,8 +150,6 @@ async fn handle_select_sticker(
     let sticker_name = sticker.name.clone();
     let sticker_display_name = sticker.get_display_name();
     let sticker_image_url = sticker.image_url.clone();
-
-    drop(app_state);
 
     // 建立包含預覽的 Interactive Message
     let attachment = Attachment {

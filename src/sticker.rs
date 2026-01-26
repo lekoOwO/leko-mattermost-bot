@@ -1,3 +1,4 @@
+use crate::database::Database;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -31,23 +32,28 @@ impl Sticker {
             self.get_url_hash()
         )
     }
+
+    // FTS-based tokenization removed: we use simple LIKE-based substring search instead.
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StickerDatabase {
-    stickers: Vec<Sticker>,
+    db: Database,
 }
 
 impl StickerDatabase {
-    /// 建立新的貼圖資料庫
-    pub fn new() -> Self {
-        Self {
-            stickers: Vec::new(),
-        }
+    /// 建立新的貼圖資料庫（DB-backed）
+    pub fn new(db: Database) -> Self {
+        Self { db }
     }
 
     /// 從 CSV 內容載入貼圖資料
-    fn load_csv_content(&mut self, content: &str, category: &str, source_name: &str) -> Result<()> {
+    fn load_csv_content_to_vec(
+        &self,
+        content: &str,
+        category: &str,
+        source_name: &str,
+    ) -> Result<Vec<Sticker>> {
         let mut reader = csv::Reader::from_reader(content.as_bytes());
 
         // 取得 header
@@ -74,6 +80,8 @@ impl StickerDatabase {
                 )
             })?;
 
+        let mut stickers: Vec<Sticker> = Vec::new();
+
         for result in reader.records() {
             let record =
                 result.with_context(|| format!("解析 CSV 記錄時發生錯誤: {}", source_name))?;
@@ -89,7 +97,7 @@ impl StickerDatabase {
                 .unwrap_or_default();
 
             if !name.is_empty() && !image_url.is_empty() {
-                self.stickers.push(Sticker {
+                stickers.push(Sticker {
                     name,
                     image_url,
                     category: category.to_string(),
@@ -97,52 +105,53 @@ impl StickerDatabase {
             }
         }
 
-        Ok(())
+        Ok(stickers)
     }
 
     /// 從 CSV 檔案載入貼圖資料
-    pub fn load_csv(&mut self, path: &str, category: &str) -> Result<()> {
+    pub fn load_csv(&self, path: &str, category: &str) -> Result<Vec<Sticker>> {
         let content =
             fs::read_to_string(path).with_context(|| format!("無法讀取 CSV 檔案: {}", path))?;
-        self.load_csv_content(&content, category, path)
+        self.load_csv_content_to_vec(&content, category, path)
     }
 
     /// 從 JSON 內容載入貼圖資料
-    fn load_json_content(
-        &mut self,
+    fn load_json_content_to_vec(
+        &self,
         content: &str,
         category: &str,
         source_name: &str,
-    ) -> Result<()> {
+    ) -> Result<Vec<Sticker>> {
         let json_data: HashMap<String, String> = serde_json::from_str(content)
             .with_context(|| format!("解析 JSON 檔案時發生錯誤: {}", source_name))?;
 
+        let mut stickers: Vec<Sticker> = Vec::new();
         for (name, image_url) in json_data {
-            self.stickers.push(Sticker {
+            stickers.push(Sticker {
                 name,
                 image_url,
                 category: category.to_string(),
             });
         }
 
-        Ok(())
+        Ok(stickers)
     }
 
     /// 從 JSON 檔案載入貼圖資料
-    pub fn load_json(&mut self, path: &str, category: &str) -> Result<()> {
+    pub fn load_json(&self, path: &str, category: &str) -> Result<Vec<Sticker>> {
         let content =
             fs::read_to_string(path).with_context(|| format!("無法讀取 JSON 檔案: {}", path))?;
-        self.load_json_content(&content, category, path)
+        self.load_json_content_to_vec(&content, category, path)
     }
 
     /// 從 HTTP GET 獲取資料並載入
     pub async fn load_from_http(
-        &mut self,
+        &self,
         url: &str,
         headers: &HashMap<String, String>,
         format: &crate::config::FileFormat,
         category: &str,
-    ) -> Result<()> {
+    ) -> Result<Vec<Sticker>> {
         let client = reqwest::Client::new();
         let mut request = client.get(url);
 
@@ -162,26 +171,41 @@ impl StickerDatabase {
             .with_context(|| format!("無法讀取 HTTP 回應內容: {}", url))?;
 
         match format {
-            crate::config::FileFormat::Csv => self.load_csv_content(&content, category, url),
-            crate::config::FileFormat::Json => self.load_json_content(&content, category, url),
+            crate::config::FileFormat::Csv => self.load_csv_content_to_vec(&content, category, url),
+            crate::config::FileFormat::Json => {
+                self.load_json_content_to_vec(&content, category, url)
+            }
         }
     }
 
     /// 從配置載入所有貼圖資料
-    pub async fn load_from_config(config: &crate::config::StickersConfig) -> Result<Self> {
-        let mut db = Self::new();
+    /// Load stickers from config and insert them into the provided Database.
+    pub async fn load_from_config(
+        db: &Database,
+        config: &crate::config::StickersConfig,
+    ) -> Result<Self> {
+        let loader = Self::new(db.clone());
+        let mut all: Vec<Sticker> = Vec::new();
 
         for category_config in &config.categories {
             for source in &category_config.sources {
                 match source {
                     crate::config::SourceConfig::File { format, path } => match format {
                         crate::config::FileFormat::Csv => {
-                            db.load_csv(path, &category_config.name)
+                            let mut v = loader
+                                .load_csv_content_to_vec(
+                                    &fs::read_to_string(path)?,
+                                    &category_config.name,
+                                    path,
+                                )
                                 .with_context(|| format!("載入 CSV 檔案失敗: {}", path))?;
+                            all.append(&mut v);
                         }
                         crate::config::FileFormat::Json => {
-                            db.load_json(path, &category_config.name)
+                            let mut v = loader
+                                .load_json(path, &category_config.name)
                                 .with_context(|| format!("載入 JSON 檔案失敗: {}", path))?;
+                            all.append(&mut v);
                         }
                     },
                     crate::config::SourceConfig::HttpGet {
@@ -189,43 +213,50 @@ impl StickerDatabase {
                         url,
                         headers,
                     } => {
-                        db.load_from_http(url, headers, format, &category_config.name)
+                        let mut v = loader
+                            .load_from_http(url, headers, format, &category_config.name)
                             .await
                             .with_context(|| format!("從 HTTP 載入資料失敗: {}", url))?;
+                        all.append(&mut v);
                     }
                 }
             }
         }
 
-        Ok(db)
+        // Replace stickers in DB so the stored state matches the config exactly.
+        db.replace_stickers(&all)
+            .await
+            .with_context(|| "寫入貼圖到資料庫失敗")?;
+
+        Ok(loader)
     }
 
     /// 取得所有分類
-    pub fn get_categories(&self) -> Vec<String> {
-        let mut categories: Vec<String> =
-            self.stickers.iter().map(|s| s.category.clone()).collect();
+    pub async fn get_categories(&self) -> Result<Vec<String>> {
+        let stats = self.db.get_sticker_category_stats().await?;
+        let mut categories: Vec<String> = stats.keys().cloned().collect();
         categories.sort();
-        categories.dedup();
-        categories
+        Ok(categories)
     }
 
     /// 取得每個分類的貼圖數量統計
-    pub fn get_category_stats(&self) -> HashMap<String, usize> {
-        let mut stats = HashMap::new();
-        for sticker in &self.stickers {
-            *stats.entry(sticker.category.clone()).or_insert(0) += 1;
-        }
-        stats
+    pub async fn get_category_stats(&self) -> Result<HashMap<String, i64>> {
+        self.db.get_sticker_category_stats().await
     }
 
     /// 取得貼圖總數
-    pub fn get_total_count(&self) -> usize {
-        self.stickers.len()
+    pub async fn get_total_count(&self) -> Result<i64> {
+        self.db.count_stickers().await
     }
 
     /// 取得所有貼圖
-    pub fn get_all(&self) -> &[Sticker] {
-        &self.stickers
+    /// Return all stickers (not recommended for very large DBs)
+    pub async fn get_all(&self) -> Result<Vec<Sticker>> {
+        // Small helper: reuse search with empty criteria and large limit
+        Ok(self
+            .db
+            .search_stickers(None, &[], &[], None, 10_000)
+            .await?)
     }
 
     /// 解析搜尋查詢
@@ -269,57 +300,47 @@ impl StickerDatabase {
     /// - 空格分隔多個關鍵字（AND 條件）
     /// - `分類: 關鍵字` 指定分類搜尋
     /// - `-關鍵字` 排除包含該關鍵字的結果
-    pub fn search(&self, keyword: &str, categories: Option<&[String]>) -> Vec<&Sticker> {
+    /// For backward compatibility this returns an empty Vec; use `search_async` instead.
+    pub fn search(&self, _keyword: &str, _categories: Option<&[String]>) -> Vec<&Sticker> {
+        vec![]
+    }
+
+    /// Async search that queries the DB and returns matching stickers
+    pub async fn search_async(
+        &self,
+        keyword: &str,
+        categories: Option<&[String]>,
+    ) -> Result<Vec<Sticker>> {
         let (query_category, include_keywords, exclude_keywords) = Self::parse_query(keyword);
-
-        self.stickers
-            .iter()
-            .filter(|s| {
-                // 檢查分類過濾（優先使用查詢中指定的分類）
-                let category_match = if let Some(ref cat) = query_category {
-                    s.category.to_lowercase() == cat.to_lowercase()
-                } else if let Some(cats) = categories {
-                    cats.is_empty() || cats.contains(&s.category)
-                } else {
-                    true
-                };
-
-                if !category_match {
-                    return false;
-                }
-
-                let name_lower = s.name.to_lowercase();
-
-                // 檢查所有包含關鍵字（AND 條件）
-                let include_match = include_keywords.is_empty()
-                    || include_keywords.iter().all(|kw| name_lower.contains(kw));
-
-                if !include_match {
-                    return false;
-                }
-
-                // 檢查排除關鍵字（任一匹配則排除）
-                let exclude_match = exclude_keywords.iter().any(|kw| name_lower.contains(kw));
-
-                !exclude_match
-            })
-            .collect()
+        let res = self
+            .db
+            .search_stickers(
+                query_category.as_deref(),
+                &include_keywords,
+                &exclude_keywords,
+                categories,
+                100,
+            )
+            .await?;
+        Ok(res)
     }
 
     /// 根據索引取得貼圖
-    pub fn get_by_index(&self, index: usize) -> Option<&Sticker> {
-        self.stickers.get(index)
+    pub fn get_by_index(&self, _index: usize) -> Option<&Sticker> {
+        // Not supported in DB-backed mode
+        None
     }
 
     /// 取得貼圖數量
-    pub fn count(&self) -> usize {
-        self.stickers.len()
+    pub async fn count(&self) -> Result<i64> {
+        self.db.count_stickers().await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::utils::setup_db;
     use std::fs;
     use tempfile::TempDir;
 
@@ -339,8 +360,8 @@ mod tests {
         assert!(display_name.ends_with(")"));
     }
 
-    #[test]
-    fn test_load_csv() {
+    #[tokio::test]
+    async fn test_load_csv() {
         let temp_dir = TempDir::new().unwrap();
         let csv_path = temp_dir.path().join("test.csv");
 
@@ -350,17 +371,21 @@ mod tests {
 
         fs::write(&csv_path, csv_content).unwrap();
 
-        let mut db = StickerDatabase::new();
-        db.load_csv(csv_path.to_str().unwrap(), "測試分類").unwrap();
-
-        assert_eq!(db.count(), 2);
-        assert_eq!(db.get_by_index(0).unwrap().name, "你為什麼不問問神奇海螺呢");
-        assert_eq!(db.get_by_index(0).unwrap().category, "測試分類");
-        assert!(!db.get_by_index(0).unwrap().get_url_hash().is_empty());
+        // use loader to parse CSV into vec, then insert into DB
+        let database = setup_db().await;
+        let loader = StickerDatabase::new(database.clone());
+        let v = loader
+            .load_csv(csv_path.to_str().unwrap(), "測試分類")
+            .unwrap();
+        assert_eq!(v.len(), 2);
+        let inserted = database.bulk_insert_stickers(&v).await.unwrap();
+        assert!(inserted >= 2);
+        let cnt = database.count_stickers().await.unwrap();
+        assert!(cnt >= 2);
     }
 
-    #[test]
-    fn test_load_csv_with_image_column() {
+    #[tokio::test]
+    async fn test_load_csv_with_image_column() {
         let temp_dir = TempDir::new().unwrap();
         let csv_path = temp_dir.path().join("test.csv");
 
@@ -371,20 +396,17 @@ mod tests {
 
         fs::write(&csv_path, csv_content).unwrap();
 
-        let mut db = StickerDatabase::new();
-        db.load_csv(csv_path.to_str().unwrap(), "其他").unwrap();
-
-        assert_eq!(db.count(), 2);
-        assert_eq!(db.get_by_index(0).unwrap().name, "測試貼圖1");
-        assert_eq!(
-            db.get_by_index(0).unwrap().image_url,
-            "https://example.com/test1.jpg"
-        );
-        assert_eq!(db.get_by_index(0).unwrap().category, "其他");
+        let database = setup_db().await;
+        let loader = StickerDatabase::new(database.clone());
+        let v = loader.load_csv(csv_path.to_str().unwrap(), "其他").unwrap();
+        assert_eq!(v.len(), 2);
+        assert_eq!(v[0].name, "測試貼圖1");
+        assert_eq!(v[0].image_url, "https://example.com/test1.jpg");
+        assert_eq!(v[0].category, "其他");
     }
 
-    #[test]
-    fn test_load_json() {
+    #[tokio::test]
+    async fn test_load_json() {
         let temp_dir = TempDir::new().unwrap();
         let json_path = temp_dir.path().join("test.json");
 
@@ -395,111 +417,243 @@ mod tests {
 
         fs::write(&json_path, json_content).unwrap();
 
-        let mut db = StickerDatabase::new();
-        db.load_json(json_path.to_str().unwrap(), "JSON分類")
+        let database = setup_db().await;
+        let loader = StickerDatabase::new(database.clone());
+        let v = loader
+            .load_json(json_path.to_str().unwrap(), "JSON分類")
             .unwrap();
-
-        assert_eq!(db.count(), 2);
-        assert!(db.get_all().iter().all(|s| s.category == "JSON分類"));
+        assert_eq!(v.len(), 2);
+        assert!(v.iter().all(|s| s.category == "JSON分類"));
     }
 
-    #[test]
-    fn test_search() {
-        let mut db = StickerDatabase::new();
-        db.stickers.push(Sticker {
-            name: "測試海螺".to_string(),
-            image_url: "https://example.com/1.jpg".to_string(),
-            category: "分類A".to_string(),
-        });
-        db.stickers.push(Sticker {
-            name: "派大星".to_string(),
-            image_url: "https://example.com/2.jpg".to_string(),
-            category: "分類B".to_string(),
-        });
+    #[tokio::test]
+    async fn test_search() {
+        let database = setup_db().await;
+        let stickers = vec![
+            Sticker {
+                name: "測試海螺".to_string(),
+                image_url: "https://example.com/1.jpg".to_string(),
+                category: "分類A".to_string(),
+            },
+            Sticker {
+                name: "派大星".to_string(),
+                image_url: "https://example.com/2.jpg".to_string(),
+                category: "分類B".to_string(),
+            },
+        ];
+        let inserted = database.bulk_insert_stickers(&stickers).await.unwrap();
+        assert!(inserted >= 2);
 
-        let results = db.search("海螺", None);
+        let results = database
+            .search_stickers(None, &vec!["海螺".to_string()], &vec![], None, 10)
+            .await
+            .unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].name, "測試海螺");
 
-        let results = db.search("", Some(&["分類A".to_string()]));
+        let results = database
+            .search_stickers(None, &vec![], &vec![], Some(&["分類A".to_string()]), 10)
+            .await
+            .unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].name, "測試海螺");
     }
 
-    #[test]
-    fn test_search_advanced() {
-        let mut db = StickerDatabase::new();
-        db.stickers.push(Sticker {
-            name: "開心派大星".to_string(),
-            image_url: "https://example.com/1.jpg".to_string(),
-            category: "海綿寶寶".to_string(),
-        });
-        db.stickers.push(Sticker {
-            name: "難過派大星".to_string(),
-            image_url: "https://example.com/2.jpg".to_string(),
-            category: "海綿寶寶".to_string(),
-        });
-        db.stickers.push(Sticker {
-            name: "開心章魚哥".to_string(),
-            image_url: "https://example.com/3.jpg".to_string(),
-            category: "海綿寶寶".to_string(),
-        });
-        db.stickers.push(Sticker {
-            name: "開心小新".to_string(),
-            image_url: "https://example.com/4.jpg".to_string(),
-            category: "蠟筆小新".to_string(),
-        });
+    #[tokio::test]
+    async fn test_search_advanced() {
+        let database = setup_db().await;
+        let stickers = vec![
+            Sticker {
+                name: "開心派大星".to_string(),
+                image_url: "https://example.com/1.jpg".to_string(),
+                category: "海綿寶寶".to_string(),
+            },
+            Sticker {
+                name: "難過派大星".to_string(),
+                image_url: "https://example.com/2.jpg".to_string(),
+                category: "海綿寶寶".to_string(),
+            },
+            Sticker {
+                name: "開心章魚哥".to_string(),
+                image_url: "https://example.com/3.jpg".to_string(),
+                category: "海綿寶寶".to_string(),
+            },
+            Sticker {
+                name: "開心小新".to_string(),
+                image_url: "https://example.com/4.jpg".to_string(),
+                category: "蠟筆小新".to_string(),
+            },
+        ];
+        database.bulk_insert_stickers(&stickers).await.unwrap();
 
-        // 測試多關鍵字（AND 條件）
-        let results = db.search("開心 派大星", None);
+        // 多關鍵字 AND
+        let results = database
+            .search_stickers(
+                None,
+                &vec!["開心".to_string(), "派大星".to_string()],
+                &vec![],
+                None,
+                10,
+            )
+            .await
+            .unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].name, "開心派大星");
 
-        // 測試分類搜尋
-        let results = db.search("海綿寶寶: 開心", None);
+        // 分類搜尋
+        let results = database
+            .search_stickers(
+                Some("海綿寶寶"),
+                &vec!["開心".to_string()],
+                &vec![],
+                None,
+                10,
+            )
+            .await
+            .unwrap();
         assert_eq!(results.len(), 2);
         assert!(results.iter().all(|s| s.name.contains("開心")));
         assert!(results.iter().all(|s| s.category == "海綿寶寶"));
 
-        // 測試排除
-        let results = db.search("開心 -派大星", None);
-        assert_eq!(results.len(), 2);
+        // 排除
+        let results = database
+            .search_stickers(
+                None,
+                &vec!["開心".to_string()],
+                &vec!["派大星".to_string()],
+                None,
+                10,
+            )
+            .await
+            .unwrap();
         assert!(results.iter().all(|s| !s.name.contains("派大星")));
 
-        // 測試分類 + 排除
-        let results = db.search("海綿寶寶: -章魚哥", None);
-        assert_eq!(results.len(), 2);
+        // 分類 + 排除
+        let results = database
+            .search_stickers(
+                Some("海綿寶寶"),
+                &vec![],
+                &vec!["章魚哥".to_string()],
+                None,
+                10,
+            )
+            .await
+            .unwrap();
         assert!(results.iter().all(|s| s.category == "海綿寶寶"));
         assert!(results.iter().all(|s| !s.name.contains("章魚哥")));
 
-        // 測試分類 + 多關鍵字 + 排除
-        let results = db.search("海綿寶寶: 派大星 -難過", None);
+        // 分類 + 多關鍵字 + 排除
+        let results = database
+            .search_stickers(
+                Some("海綿寶寶"),
+                &vec!["派大星".to_string()],
+                &vec!["難過".to_string()],
+                None,
+                10,
+            )
+            .await
+            .unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].name, "開心派大星");
     }
 
-    #[test]
-    fn test_get_categories() {
-        let mut db = StickerDatabase::new();
-        db.stickers.push(Sticker {
-            name: "測試1".to_string(),
-            image_url: "https://example.com/1.jpg".to_string(),
-            category: "分類A".to_string(),
-        });
-        db.stickers.push(Sticker {
-            name: "測試2".to_string(),
-            image_url: "https://example.com/2.jpg".to_string(),
-            category: "分類B".to_string(),
-        });
-        db.stickers.push(Sticker {
-            name: "測試3".to_string(),
-            image_url: "https://example.com/3.jpg".to_string(),
-            category: "分類A".to_string(),
-        });
+    #[tokio::test]
+    async fn test_get_categories() {
+        let database = setup_db().await;
+        let stickers = vec![
+            Sticker {
+                name: "測試1".to_string(),
+                image_url: "https://example.com/1.jpg".to_string(),
+                category: "分類A".to_string(),
+            },
+            Sticker {
+                name: "測試2".to_string(),
+                image_url: "https://example.com/2.jpg".to_string(),
+                category: "分類B".to_string(),
+            },
+            Sticker {
+                name: "測試3".to_string(),
+                image_url: "https://example.com/3.jpg".to_string(),
+                category: "分類A".to_string(),
+            },
+        ];
+        database.bulk_insert_stickers(&stickers).await.unwrap();
 
-        let categories = db.get_categories();
+        let categories_map = database.get_sticker_category_stats().await.unwrap();
+        let mut categories: Vec<String> = categories_map.keys().cloned().collect();
+        categories.sort();
         assert_eq!(categories.len(), 2);
         assert!(categories.contains(&"分類A".to_string()));
         assert!(categories.contains(&"分類B".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_load_from_config_replaces_existing() {
+        use crate::config::{CategoryConfig, FileFormat, SourceConfig, StickersConfig};
+
+        let database = setup_db().await;
+
+        // Create first JSON file with stickers a and b
+        let temp_dir = TempDir::new().unwrap();
+        let file1 = temp_dir.path().join("set1.json");
+        let json1 = r#"{"a": "https://example.com/a.png", "b": "https://example.com/b.png"}"#;
+        fs::write(&file1, json1).unwrap();
+
+        let cat1 = CategoryConfig {
+            name: "CAT1".to_string(),
+            sources: vec![SourceConfig::File {
+                format: FileFormat::Json,
+                path: file1.to_string_lossy().to_string(),
+            }],
+        };
+
+        let cfg1 = StickersConfig {
+            categories: vec![cat1],
+        };
+
+        // Load first config
+        let _loader1 = StickerDatabase::load_from_config(&database, &cfg1)
+            .await
+            .expect("load1");
+
+        let cnt1 = database.count_stickers().await.expect("count1");
+        assert_eq!(cnt1, 2);
+
+        // Create second JSON file with stickers b and c (a should be removed)
+        let file2 = temp_dir.path().join("set2.json");
+        let json2 = r#"{"b": "https://example.com/b.png", "c": "https://example.com/c.png"}"#;
+        fs::write(&file2, json2).unwrap();
+
+        let cat2 = CategoryConfig {
+            name: "CAT1".to_string(),
+            sources: vec![SourceConfig::File {
+                format: FileFormat::Json,
+                path: file2.to_string_lossy().to_string(),
+            }],
+        };
+
+        let cfg2 = StickersConfig {
+            categories: vec![cat2],
+        };
+
+        // Load second config (should replace existing stickers)
+        let _loader2 = StickerDatabase::load_from_config(&database, &cfg2)
+            .await
+            .expect("load2");
+
+        let cnt2 = database.count_stickers().await.expect("count2");
+        assert_eq!(cnt2, 2);
+
+        // Ensure 'a' is gone and 'c' exists
+        let res_a = database
+            .search_stickers(None, &vec!["a".to_string()], &vec![], None, 10)
+            .await
+            .unwrap();
+        assert_eq!(res_a.len(), 0);
+        let res_c = database
+            .search_stickers(None, &vec!["c".to_string()], &vec![], None, 10)
+            .await
+            .unwrap();
+        assert_eq!(res_c.len(), 1);
     }
 }

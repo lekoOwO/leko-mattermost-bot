@@ -1,14 +1,17 @@
+use crate::sticker::Sticker;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use sqlx::Acquire;
+use sqlx::Row;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
 use std::collections::HashMap;
 use std::str::FromStr;
 use tracing::info;
 
 /// 資料庫連接池
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Database {
     pool: SqlitePool,
 }
@@ -165,14 +168,55 @@ mod tests {
         assert_eq!(records.len(), 1);
 
         // ensure shortage_adjustments rows exist
-        let cnt: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM shortage_adjustments WHERE group_buy_id = ?",
-        )
-        .bind(&gb.id)
-        .fetch_one(&db.pool)
-        .await
-        .expect("count adjustments");
+        let cnt: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM shortage_adjustments WHERE group_buy_id = ?")
+                .bind(&gb.id)
+                .fetch_one(&db.pool)
+                .await
+                .expect("count adjustments");
         assert!(cnt >= 1);
+    }
+
+    #[tokio::test]
+    async fn test_sticker_bulk_insert_and_search() {
+        use crate::sticker::Sticker;
+
+        let db = setup_db().await;
+
+        let stickers = vec![
+            Sticker {
+                name: "apple smile".to_string(),
+                image_url: "https://example.com/a1.png".to_string(),
+                category: "fruit".to_string(),
+            },
+            Sticker {
+                name: "banana happy".to_string(),
+                image_url: "https://example.com/b1.png".to_string(),
+                category: "fruit".to_string(),
+            },
+            Sticker {
+                name: "carrot".to_string(),
+                image_url: "https://example.com/c1.png".to_string(),
+                category: "veg".to_string(),
+            },
+        ];
+
+        let inserted = db
+            .bulk_insert_stickers(&stickers)
+            .await
+            .expect("bulk insert");
+        assert!(inserted >= 3);
+
+        let cnt = db.count_stickers().await.expect("count");
+        assert!(cnt >= 3);
+
+        // search for "apple"
+        let res = db
+            .search_stickers(None, &vec!["apple".to_string()], &vec![], None, 10)
+            .await
+            .expect("search");
+        assert_eq!(res.len(), 1);
+        assert_eq!(res[0].name, "apple smile");
     }
 }
 
@@ -229,13 +273,11 @@ impl Database {
             }
         }
 
-    // No external schema provided or readable — apply the embedded schema.
-    self.apply_embedded_schema().await?;
+        // No external schema provided or readable — apply the embedded schema.
+        self.apply_embedded_schema().await?;
 
         Ok(())
     }
-
-    
 
     /// Apply the embedded schema (EMBEDDED_SCHEMA) to the database. This is
     /// the fallback path and is also the recommended runtime behavior so the
@@ -248,9 +290,174 @@ impl Database {
             }
             sqlx::query(s).execute(&self.pool).await?;
         }
-    info!("資料表結構初始化完成 (embedded)");
+        info!("資料表結構初始化完成 (embedded)");
 
         Ok(())
+    }
+
+    /* ---------- Sticker helpers ---------- */
+
+    /// Bulk insert stickers into the stickers table (INSERT OR IGNORE to avoid duplicates)
+    pub async fn bulk_insert_stickers(&self, stickers: &[Sticker]) -> Result<usize> {
+        let mut inserted: usize = 0;
+        // Acquire a dedicated connection and start a transaction for bulk insert
+        let mut conn = self.pool.acquire().await?;
+        let mut tx = conn.begin().await?;
+
+        for s in stickers {
+            let url_hash = s.get_url_hash();
+            let created_at = Utc::now().to_rfc3339();
+            let res = sqlx::query(
+                "INSERT OR IGNORE INTO stickers (name, image_url, category, url_hash, created_at) VALUES (?, ?, ?, ?, ?)",
+            )
+            .bind(&s.name)
+            .bind(&s.image_url)
+            .bind(&s.category)
+            .bind(&url_hash)
+            .bind(&created_at)
+            .execute(&mut *tx)
+            .await?;
+
+            if res.rows_affected() > 0 {
+                inserted += 1;
+            }
+        }
+        // no FTS population — using LIKE-based searches instead
+
+        tx.commit().await?;
+        Ok(inserted)
+    }
+
+    /// Replace all stickers atomically: delete existing rows and insert the provided list.
+    /// Returns number of inserted rows.
+    pub async fn replace_stickers(&self, stickers: &[Sticker]) -> Result<usize> {
+        let mut inserted: usize = 0;
+        let mut conn = self.pool.acquire().await?;
+        let mut tx = conn.begin().await?;
+
+        // Clear existing stickers
+        sqlx::query("DELETE FROM stickers")
+            .execute(&mut *tx)
+            .await?;
+
+        for s in stickers {
+            let url_hash = s.get_url_hash();
+            let created_at = Utc::now().to_rfc3339();
+            let res = sqlx::query(
+                "INSERT OR IGNORE INTO stickers (name, image_url, category, url_hash, created_at) VALUES (?, ?, ?, ?, ?)",
+            )
+            .bind(&s.name)
+            .bind(&s.image_url)
+            .bind(&s.category)
+            .bind(&url_hash)
+            .bind(&created_at)
+            .execute(&mut *tx)
+            .await?;
+
+            if res.rows_affected() > 0 {
+                inserted += 1;
+            }
+        }
+
+        // no FTS population during replace — using LIKE-based searches instead
+
+        tx.commit().await?;
+        Ok(inserted)
+    }
+
+    /// Count total stickers
+    pub async fn count_stickers(&self) -> Result<i64> {
+        let cnt: i64 = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM stickers")
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(cnt)
+    }
+
+    /// Get category statistics (category -> count)
+    pub async fn get_sticker_category_stats(&self) -> Result<HashMap<String, i64>> {
+        let rows = sqlx::query("SELECT category, COUNT(*) as cnt FROM stickers GROUP BY category")
+            .fetch_all(&self.pool)
+            .await?;
+
+        let mut map = HashMap::new();
+        for r in rows {
+            let category: String = r.try_get("category")?;
+            let cnt: i64 = r.try_get("cnt")?;
+            map.insert(category, cnt);
+        }
+        Ok(map)
+    }
+
+    /// Search stickers with include/exclude keywords and optional category filters.
+    pub async fn search_stickers(
+        &self,
+        opt_category: Option<&str>,
+        include_keywords: &[String],
+        exclude_keywords: &[String],
+        categories_filter: Option<&[String]>,
+        limit: i64,
+    ) -> Result<Vec<Sticker>> {
+        let mut sql = String::from("SELECT name, image_url, category FROM stickers");
+        let mut where_clauses: Vec<String> = Vec::new();
+        let mut binds: Vec<String> = Vec::new();
+
+        if let Some(cat) = opt_category {
+            where_clauses.push("LOWER(category) = LOWER(?)".to_string());
+            binds.push(cat.to_string());
+        } else if let Some(cats) = categories_filter {
+            if !cats.is_empty() {
+                let placeholders = cats.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+                where_clauses.push(format!("category IN ({})", placeholders));
+                for c in cats.iter() {
+                    binds.push(c.clone());
+                }
+            }
+        }
+
+        for kw in include_keywords.iter() {
+            where_clauses.push("LOWER(name) LIKE LOWER(?)".to_string());
+            binds.push(format!("%{}%", kw));
+        }
+
+        if !exclude_keywords.is_empty() {
+            let mut exs: Vec<String> = Vec::new();
+            for _ in exclude_keywords.iter() {
+                exs.push("LOWER(name) LIKE LOWER(?)".to_string());
+            }
+            where_clauses.push(format!("NOT ({})", exs.join(" OR ")));
+            for kw in exclude_keywords.iter() {
+                binds.push(format!("%{}%", kw));
+            }
+        }
+
+        if !where_clauses.is_empty() {
+            sql.push_str(" WHERE ");
+            sql.push_str(&where_clauses.join(" AND "));
+        }
+
+        sql.push_str(" ORDER BY category, name LIMIT ?");
+
+        let mut q = sqlx::query(&sql);
+        for b in binds.iter() {
+            q = q.bind(b);
+        }
+        q = q.bind(limit);
+
+        let rows = q.fetch_all(&self.pool).await?;
+
+        let mut stickers_out: Vec<Sticker> = Vec::new();
+        for r in rows {
+            let name: String = r.try_get("name")?;
+            let image_url: String = r.try_get("image_url")?;
+            let category: String = r.try_get("category")?;
+            stickers_out.push(Sticker {
+                name,
+                image_url,
+                category,
+            });
+        }
+
+        Ok(stickers_out)
     }
 
     /// 記錄操作日誌
@@ -625,10 +832,11 @@ impl Database {
         .await?;
 
         // 記錄日誌（details 為 JSON，含 version）
-        let version: i64 = sqlx::query_scalar!("SELECT version FROM group_buys WHERE id = ?", group_buy_id)
-            .fetch_one(&self.pool)
-            .await
-            .unwrap_or(0i64);
+        let version: i64 =
+            sqlx::query_scalar!("SELECT version FROM group_buys WHERE id = ?", group_buy_id)
+                .fetch_one(&self.pool)
+                .await
+                .unwrap_or(0i64);
         let details_json = serde_json::json!({
             "buyer_id": buyer_id,
             "action": "cancel_all_registrations",
@@ -697,24 +905,27 @@ impl Database {
     ) -> Result<()> {
         let mut tx = self.pool.begin().await?;
 
-    // 取得訂單資訊
-    let order = sqlx::query_as!(
-        GroupBuyOrderRow,
-        "SELECT id, group_buy_id, registrar_id, registrar_username,
+        // 取得訂單資訊
+        let order = sqlx::query_as!(
+            GroupBuyOrderRow,
+            "SELECT id, group_buy_id, registrar_id, registrar_username,
             buyer_id, buyer_username, item_name, quantity,
             original_quantity, unit_price, created_at
          FROM group_buy_orders
          WHERE id = ?",
-        order_id
-    )
-    .fetch_one(&mut *tx)
-    .await?;
+            order_id
+        )
+        .fetch_one(&mut *tx)
+        .await?;
 
         // 檢查團購狀態
         let order_group_buy_id = order.group_buy_id.clone();
-        let status: String = sqlx::query_scalar!("SELECT status FROM group_buys WHERE id = ?", order_group_buy_id)
-            .fetch_one(&mut *tx)
-            .await?;
+        let status: String = sqlx::query_scalar!(
+            "SELECT status FROM group_buys WHERE id = ?",
+            order_group_buy_id
+        )
+        .fetch_one(&mut *tx)
+        .await?;
 
         if status != "closed" {
             anyhow::bail!("只能在團購截止後調整缺貨");
@@ -744,9 +955,9 @@ impl Database {
         .await?;
 
         // 記錄調整歷史
-    let now = Utc::now().to_rfc3339();
-    let now_for_insert = now.clone();
-    sqlx::query!(
+        let now = Utc::now().to_rfc3339();
+        let now_for_insert = now.clone();
+        sqlx::query!(
             "INSERT INTO shortage_adjustments (
                 group_buy_id, order_id, adjuster_id, adjuster_username,
                 item_name, buyer_id, buyer_username, old_quantity, new_quantity, created_at
@@ -799,9 +1010,10 @@ impl Database {
         let mut tx = self.pool.begin().await?;
 
         // 檢查團購狀態必須是 closed
-        let status: String = sqlx::query_scalar!("SELECT status FROM group_buys WHERE id = ?", group_buy_id)
-            .fetch_one(&mut *tx)
-            .await?;
+        let status: String =
+            sqlx::query_scalar!("SELECT status FROM group_buys WHERE id = ?", group_buy_id)
+                .fetch_one(&mut *tx)
+                .await?;
 
         if status != "closed" {
             anyhow::bail!("只能在團購截止後調整缺貨");
@@ -886,11 +1098,7 @@ impl Database {
 
         // 記錄日誌（在同一交易中插入以避免連線/鎖定問題）
         let now2 = Utc::now().to_rfc3339();
-        let details = format!(
-            "調整 {} 的數量，影響 {} 位用戶",
-            item_name,
-            records.len()
-        );
+        let details = format!("調整 {} 的數量，影響 {} 位用戶", item_name, records.len());
         sqlx::query!(
             "INSERT INTO group_buy_logs (group_buy_id, user_id, username, action, details, created_at)
              VALUES (?, ?, ?, ?, ?, ?)",

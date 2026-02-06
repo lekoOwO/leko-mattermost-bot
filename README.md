@@ -37,6 +37,7 @@ mattermost:
   default_avatar: https://example.com/avatar.png # 可選，預設頭像（推薦使用 URL）
   # default_avatar: "#bot_user_id_here"          # 或使用 #user_id 格式
   # default_avatar: "@bot_username"              # 或使用 @username 格式（啟動時自動解析）
+  # default_avatar: ":emoji_name:"               # 或使用 :emoji: 格式（啟動時自動解析）
 
 stickers:
   categories:
@@ -77,15 +78,17 @@ admin:                          # 管理員列表（可選）
 
 #### 預設頭像配置說明
 
-`default_avatar` 是可選的配置項，用於設定在沒有指定特定用戶頭像的訊息中顯示的預設頭像。支援三種格式：
+`default_avatar` 是可選的配置項，用於設定在沒有指定特定用戶頭像的訊息中顯示的預設頭像。支援四種格式：
 
 - **一般 URL**（推薦）：`https://example.com/avatar.png`
 - **用戶 ID 格式**：`#user_id` - 會自動轉換為該用戶的頭像 API URL
 - **用戶名稱格式**：`@username` - 啟動時自動解析為用戶 ID
+- **Emoji 格式**：`:emoji:` - 啟動時自動解析為 emoji 圖片 URL
 
 ⚠️ **格式說明**：
 - `#user_id`：直接指定 Mattermost 用戶 ID（例如：`#w5qj3cmxfjyu5kqjte55rwhhbh`）
 - `@username`：指定 Mattermost 用戶名稱（例如：`@bot`），程式啟動時會自動查詢並解析為用戶 ID
+- `:emoji:`：指定 Mattermost emoji 名稱（例如：`:troll:`），程式啟動時會自動查詢並解析為 emoji URL
 
 **如何獲取 user_id**：
 1. 在 Mattermost 中點擊用戶個人資料

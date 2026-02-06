@@ -122,6 +122,23 @@ async fn main() -> Result<()> {
         }
     }
 
+    // 解析 default_avatar 的 :emoji: 為 emoji URL
+    if config.needs_emoji_resolution() {
+        if let Some(emoji_name) = config.get_avatar_emoji_name() {
+            info!("正在解析預設頭像 emoji: :{}", emoji_name);
+            match mattermost_client.get_emoji_by_name(&emoji_name).await {
+                Ok(emoji) => {
+                    info!("解析成功: :{}: -> {}", emoji_name, emoji.id);
+                    config.set_resolved_emoji(emoji.id);
+                }
+                Err(e) => {
+                    error!("解析預設頭像 emoji 失敗: {}", e);
+                    error!("將使用未解析的值，可能導致頭像顯示異常");
+                }
+            }
+        }
+    }
+
     let database = Database::new(&config.database_url)
         .await
         .context("初始化資料庫失敗")?;

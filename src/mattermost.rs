@@ -171,6 +171,15 @@ pub struct User {
     pub last_name: Option<String>,
 }
 
+/// Emoji 資訊
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Emoji {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub creator_id: Option<String>,
+}
+
 /// Channel 資訊
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Channel {
@@ -404,6 +413,27 @@ impl MattermostClient {
 
         let user: User = response.json().await.context("解析使用者資訊失敗")?;
         Ok(user)
+    }
+
+    /// 透過 emoji 名稱獲取 emoji 資訊
+    pub async fn get_emoji_by_name(&self, name: &str) -> Result<Emoji> {
+        let url = format!("{}/api/v4/emoji/name/{}", self.base_url, name);
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .context("透過 emoji 名稱獲取 emoji 資訊失敗")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            anyhow::bail!("透過 emoji 名稱獲取 emoji 資訊失敗: {} - {}", status, text);
+        }
+
+        let emoji: Emoji = response.json().await.context("解析 emoji 資訊失敗")?;
+        Ok(emoji)
     }
 
     /// 獲取當前用戶（bot 自己）的資訊

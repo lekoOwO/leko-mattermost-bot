@@ -1,6 +1,32 @@
 use anyhow::{Context, Result};
+use async_trait::async_trait;
 use reqwest::{Client, header};
 use serde::{Deserialize, Serialize};
+
+/// Mattermost 服務的 trait，用於測試時注入 mock 實作
+#[async_trait]
+pub trait MattermostService: Send + Sync {
+    async fn create_post(&self, post: &Post) -> Result<()>;
+    async fn create_post_with_response(&self, post: &Post) -> Result<String>;
+    async fn update_post(&self, post_id: &str, message: &str, props: Option<serde_json::Value>) -> Result<()>;
+    async fn delete_post(&self, post_id: &str) -> Result<()>;
+    async fn send_ephemeral_post(&self, channel_id: &str, user_id: &str, message: &str, root_id: Option<&str>) -> Result<()>;
+    async fn get_user(&self, user_id: &str) -> Result<User>;
+    async fn get_me(&self) -> Result<User>;
+    async fn get_channel(&self, channel_id: &str) -> Result<Channel>;
+    async fn create_direct_channel(&self, user_id_1: &str, user_id_2: &str) -> Result<Channel>;
+    async fn create_post_simple(&self, channel_id: &str, message: &str, props: Option<serde_json::Value>) -> Result<PostResponse>;
+    async fn open_dialog(
+        &self,
+        trigger_id: &str,
+        url: &str,
+        title: &str,
+        elements: &[DialogElement],
+        submit_label: Option<&str>,
+        introduction_text: Option<&str>,
+        state: Option<&str>,
+    ) -> Result<()>;
+}
 
 #[derive(Debug, Clone)]
 pub struct MattermostClient {
@@ -572,6 +598,63 @@ pub enum DialogElementType {
 pub struct DialogOption {
     pub text: String,
     pub value: String,
+}
+
+/// 為 MattermostClient 實作 MattermostService trait
+#[async_trait]
+impl MattermostService for MattermostClient {
+    async fn create_post(&self, post: &Post) -> Result<()> {
+        self.create_post(post).await
+    }
+
+    async fn create_post_with_response(&self, post: &Post) -> Result<String> {
+        self.create_post_with_response(post).await
+    }
+
+    async fn update_post(&self, post_id: &str, message: &str, props: Option<serde_json::Value>) -> Result<()> {
+        self.update_post(post_id, message, props).await
+    }
+
+    async fn delete_post(&self, post_id: &str) -> Result<()> {
+        self.delete_post(post_id).await
+    }
+
+    async fn send_ephemeral_post(&self, channel_id: &str, user_id: &str, message: &str, root_id: Option<&str>) -> Result<()> {
+        self.send_ephemeral_post(channel_id, user_id, message, root_id).await
+    }
+
+    async fn get_user(&self, user_id: &str) -> Result<User> {
+        self.get_user(user_id).await
+    }
+
+    async fn get_me(&self) -> Result<User> {
+        self.get_me().await
+    }
+
+    async fn get_channel(&self, channel_id: &str) -> Result<Channel> {
+        self.get_channel(channel_id).await
+    }
+
+    async fn create_direct_channel(&self, user_id_1: &str, user_id_2: &str) -> Result<Channel> {
+        self.create_direct_channel(user_id_1, user_id_2).await
+    }
+
+    async fn create_post_simple(&self, channel_id: &str, message: &str, props: Option<serde_json::Value>) -> Result<PostResponse> {
+        self.create_post_simple(channel_id, message, props).await
+    }
+
+    async fn open_dialog(
+        &self,
+        trigger_id: &str,
+        url: &str,
+        title: &str,
+        elements: &[DialogElement],
+        submit_label: Option<&str>,
+        introduction_text: Option<&str>,
+        state: Option<&str>,
+    ) -> Result<()> {
+        self.open_dialog(trigger_id, url, title, elements, submit_label, introduction_text, state).await
+    }
 }
 
 #[cfg(test)]

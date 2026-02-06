@@ -27,6 +27,7 @@ uuid = { version = "1.11", features = ["v4", "serde"] }
 rust_decimal = { version = "1.36", features = ["serde"] }
 rust_decimal_macros = "1.36"
 dotenvy = "0.15"
+async-trait = "0.1"
 
 [[bin]]
 name = "sqlx_prepare"

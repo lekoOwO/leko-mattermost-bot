@@ -385,6 +385,27 @@ impl MattermostClient {
         Ok(user)
     }
 
+    /// 透過使用者名稱獲取使用者資訊
+    pub async fn get_user_by_username(&self, username: &str) -> Result<User> {
+        let url = format!("{}/api/v4/users/username/{}", self.base_url, username);
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .context("透過使用者名稱獲取使用者資訊失敗")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            anyhow::bail!("透過使用者名稱獲取使用者資訊失敗: {} - {}", status, text);
+        }
+
+        let user: User = response.json().await.context("解析使用者資訊失敗")?;
+        Ok(user)
+    }
+
     /// 獲取當前用戶（bot 自己）的資訊
     pub async fn get_me(&self) -> Result<User> {
         let url = format!("{}/api/v4/users/me", self.base_url);

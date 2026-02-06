@@ -34,8 +34,9 @@ mattermost:
   bot_token: your-bot-token-here
   slash_command_token: your-slash-command-token  # 可選，建議啟用
   bot_callback_url: http://your-bot-server:3000  # Bot 服務位址
-  default_avatar: https://example.com/avatar.png # 可選，預設頭像
-  # default_avatar: "@botusername"               # 或使用 @username 格式
+  default_avatar: https://example.com/avatar.png # 可選，預設頭像（推薦使用 URL）
+  # default_avatar: "#bot_user_id_here"          # 或使用 #user_id 格式
+  # default_avatar: "@bot_username"              # 或使用 @username 格式（啟動時自動解析）
 
 stickers:
   categories:
@@ -76,10 +77,20 @@ admin:                          # 管理員列表（可選）
 
 #### 預設頭像配置說明
 
-`default_avatar` 是可選的配置項，用於設定在沒有指定特定用戶頭像的訊息中顯示的預設頭像。支援兩種格式：
+`default_avatar` 是可選的配置項，用於設定在沒有指定特定用戶頭像的訊息中顯示的預設頭像。支援三種格式：
 
-- **一般 URL**：`https://example.com/avatar.png`
-- **用戶名格式**：`@username` - 會自動轉換為該 Mattermost 用戶的頭像
+- **一般 URL**（推薦）：`https://example.com/avatar.png`
+- **用戶 ID 格式**：`#user_id` - 會自動轉換為該用戶的頭像 API URL
+- **用戶名稱格式**：`@username` - 啟動時自動解析為用戶 ID
+
+⚠️ **格式說明**：
+- `#user_id`：直接指定 Mattermost 用戶 ID（例如：`#w5qj3cmxfjyu5kqjte55rwhhbh`）
+- `@username`：指定 Mattermost 用戶名稱（例如：`@bot`），程式啟動時會自動查詢並解析為用戶 ID
+
+**如何獲取 user_id**：
+1. 在 Mattermost 中點擊用戶個人資料
+2. 在 URL 中可以看到 user_id，例如：`/messages/@user_id`
+3. 或使用 Mattermost API: `GET /api/v4/users/username/{username}` 獲取 user_id
 
 此設定適用於以下情況：
 - `/leko help` 顯示說明訊息時

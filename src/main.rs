@@ -104,6 +104,24 @@ async fn main() -> Result<()> {
 
     info!("Bot 使用者: {} ({})", bot_user.username, bot_user_id);
 
+    // 解析 default_avatar 的 @username 為 user_id
+    let mut config = config;
+    if config.needs_avatar_resolution() {
+        if let Some(username) = config.get_avatar_username() {
+            info!("正在解析預設頭像使用者名稱: @{}", username);
+            match mattermost_client.get_user_by_username(&username).await {
+                Ok(user) => {
+                    info!("解析成功: {} -> {}", username, user.id);
+                    config.set_resolved_avatar(user.id);
+                }
+                Err(e) => {
+                    error!("解析預設頭像使用者名稱失敗: {}", e);
+                    error!("將使用未解析的值，可能導致頭像顯示異常");
+                }
+            }
+        }
+    }
+
     let database = Database::new(&config.database_url)
         .await
         .context("初始化資料庫失敗")?;

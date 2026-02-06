@@ -5,6 +5,7 @@ use tokio::sync::RwLock;
 use tracing::{error, info};
 
 use super::auth::verify_slash_command_token;
+use super::reply_helpers::{empty_json_reply, ephemeral_json_reply, get_form_field};
 use crate::AppState;
 use crate::mattermost::{Action, ActionOption, Attachment, Integration};
 
@@ -28,10 +29,10 @@ pub async fn handle_sticker_command_impl(
     form: std::collections::HashMap<String, String>,
     state: Arc<RwLock<AppState>>,
 ) -> Result<warp::reply::Json, warp::Rejection> {
-    let text = form.get("text").cloned().unwrap_or_default();
-    let user_name = form.get("user_name").cloned().unwrap_or_default();
-    let user_id = form.get("user_id").cloned().unwrap_or_default();
-    let response_url = form.get("response_url").cloned().unwrap_or_default();
+    let text = get_form_field(&form, "text");
+    let user_name = get_form_field(&form, "user_name");
+    let user_id = get_form_field(&form, "user_id");
+    let response_url = get_form_field(&form, "response_url");
 
     info!("搜尋關鍵字: '{}', 使用者: {}", text, user_name);
 
@@ -53,10 +54,7 @@ pub async fn handle_sticker_command_impl(
         Ok(v) => v.into_iter().take(25).collect::<Vec<_>>(),
         Err(e) => {
             error!("搜尋貼圖失敗: {}", e);
-            return Ok(warp::reply::json(&serde_json::json!({
-                "response_type": "ephemeral",
-                "text": "搜尋貼圖失敗，請稍後再試"
-            })));
+            return Ok(ephemeral_json_reply("搜尋貼圖失敗，請稍後再試"));
         }
     };
 
@@ -67,10 +65,7 @@ pub async fn handle_sticker_command_impl(
         } else {
             format!("找不到符合「{}」的貼圖", text)
         };
-        return Ok(warp::reply::json(&serde_json::json!({
-            "response_type": "ephemeral",
-            "text": message
-        })));
+        return Ok(ephemeral_json_reply(message));
     }
 
     // 建立貼圖選項
@@ -154,22 +149,16 @@ pub async fn handle_sticker_command_impl(
             .await
         {
             error!("透過 response_url 發送失敗: {}", e);
-            return Ok(warp::reply::json(&serde_json::json!({
-                "response_type": "ephemeral",
-                "text": "發送貼圖選擇器失敗，請稍後再試"
-            })));
+            return Ok(ephemeral_json_reply("發送貼圖選擇器失敗，請稍後再試"));
         }
         info!(
             "已建立 Interactive Message，共 {} 個貼圖選項",
             stickers_count
         );
         // 回傳空回應
-        Ok(warp::reply::json(&serde_json::json!({})))
+        Ok(empty_json_reply())
     } else {
         error!("response_url 為空");
-        Ok(warp::reply::json(&serde_json::json!({
-            "response_type": "ephemeral",
-            "text": "無法發送貼圖選擇器"
-        })))
+        Ok(ephemeral_json_reply("無法發送貼圖選擇器"))
     }
 }

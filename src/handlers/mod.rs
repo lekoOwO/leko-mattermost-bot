@@ -4,6 +4,7 @@ mod actions;
 mod auth;
 mod group_buy;
 mod leko;
+mod reply_helpers;
 mod sticker;
 
 // 重新導出公開的處理器函數
@@ -15,6 +16,7 @@ pub use group_buy::{
     handle_register_dialog,
 };
 pub use leko::handle_leko_command;
+// reply_helpers 中的函數供內部 handlers 使用，不需要全部重新導出
 pub use sticker::handle_sticker_command;
 
 use tracing::error;

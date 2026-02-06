@@ -7,6 +7,7 @@ use warp::http::StatusCode;
 
 use super::auth::verify_slash_command_token;
 use super::group_buy::handle_group_buy_command;
+use super::reply_helpers::{ephemeral_json_with_status, get_form_field};
 use super::sticker::handle_sticker_command_impl;
 use crate::websocket;
 use crate::AppState;
@@ -23,7 +24,7 @@ pub async fn handle_leko_command(
     // 驗證 slash command token
     verify_slash_command_token(&form, &state, "leko").await?;
 
-    let text = form.get("text").cloned().unwrap_or_default();
+    let text = get_form_field(&form, "text");
     let text_trimmed = text.trim();
 
     // 解析子指令
@@ -79,17 +80,11 @@ async fn handle_admin_subcommand(
     state: Arc<RwLock<AppState>>,
 ) -> Result<warp::reply::WithStatus<warp::reply::Json>, warp::Rejection> {
     // 取得使用者資訊
-    let user_id = form.get("user_id").cloned().unwrap_or_default();
-    let user_name = form.get("user_name").cloned().unwrap_or_default();
+    let user_id = get_form_field(&form, "user_id");
+    let user_name = get_form_field(&form, "user_name");
 
     if user_id.is_empty() {
-        return Ok(warp::reply::with_status(
-            warp::reply::json(&serde_json::json!({
-                "response_type": "ephemeral",
-                "text": "❌ 無法取得使用者資訊"
-            })),
-            StatusCode::OK,
-        ));
+        return Ok(ephemeral_json_with_status("❌ 無法取得使用者資訊"));
     }
 
     // 檢查是否為管理員
@@ -102,12 +97,8 @@ async fn handle_admin_subcommand(
             "非管理員嘗試使用 admin 指令: {} ({})",
             user_name, user_id
         );
-        return Ok(warp::reply::with_status(
-            warp::reply::json(&serde_json::json!({
-                "response_type": "ephemeral",
-                "text": "⚠️ 您沒有使用此功能的權限。"
-            })),
-            StatusCode::OK,
+        return Ok(ephemeral_json_with_status(
+            "⚠️ 您沒有使用此功能的權限。",
         ));
     }
 
@@ -119,11 +110,5 @@ async fn handle_admin_subcommand(
     // 呼叫 websocket 的管理指令處理函數
     let response_text = websocket::handle_admin_command(admin_command, state).await;
 
-    Ok(warp::reply::with_status(
-        warp::reply::json(&serde_json::json!({
-            "response_type": "ephemeral",
-            "text": response_text
-        })),
-        StatusCode::OK,
-    ))
+    Ok(ephemeral_json_with_status(response_text))
 }

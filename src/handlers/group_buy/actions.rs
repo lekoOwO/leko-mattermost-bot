@@ -1,4 +1,5 @@
 use super::*;
+use crate::handlers::reply_helpers::{empty_json_reply, ephemeral_text_json};
 use std::collections::HashMap;
 
 /// 處理團購按鈕 Action（dispatcher）
@@ -61,9 +62,7 @@ pub async fn handle_group_buy_action(
         "subtotal" => handle_subtotal_action(action_req, state).await,
         _ => {
             error!("未知的 action: {}", action);
-            Ok(warp::reply::json(&serde_json::json!({
-                "ephemeral_text": "未知的操作"
-            })))
+            Ok(ephemeral_text_json("未知的操作"))
         }
     }
 }
@@ -93,16 +92,16 @@ async fn handle_edit_items_action(
 
     // 檢查權限：只有建立者可以編輯
     if group_buy.creator_id != action_req.user_id {
-        return Ok(warp::reply::json(&serde_json::json!({
-            "ephemeral_text": "⚠️ 只有團購建立者可以編輯商品"
-        })));
+        return Ok(ephemeral_text_json(
+            "⚠️ 只有團購建立者可以編輯商品",
+        ));
     }
 
     // 檢查狀態：只有 Active 狀態可以編輯
     if group_buy.status != GroupBuyStatus::Active {
-        return Ok(warp::reply::json(&serde_json::json!({
-            "ephemeral_text": "⚠️ 只有進行中的團購可以編輯商品"
-        })));
+        return Ok(ephemeral_text_json(
+            "⚠️ 只有進行中的團購可以編輯商品",
+        ));
     }
 
     // 將當前商品轉換為 YAML 格式（helper in dialogs submodule）
@@ -129,12 +128,10 @@ async fn handle_edit_items_action(
         super::dialogs::open_edit_items_dialog(&state_guard.mattermost_client, &edit_params).await
     {
         error!("打開編輯商品 Dialog 失敗: {}", e);
-        return Ok(warp::reply::json(&serde_json::json!({
-            "ephemeral_text": "打開編輯視窗失敗"
-        })));
+        return Ok(ephemeral_text_json("打開編輯視窗失敗"));
     }
 
-    Ok(warp::reply::json(&serde_json::json!({})))
+    Ok(empty_json_reply())
 }
 
 async fn handle_register_action(
@@ -153,32 +150,24 @@ async fn handle_register_action(
     let group_buy = match state_guard.database.get_group_buy(group_buy_id).await {
         Ok(Some(gb)) => gb,
         Ok(None) => {
-            return Ok(warp::reply::json(&serde_json::json!({
-                "ephemeral_text": "找不到該團購"
-            })));
+            return Ok(ephemeral_text_json("找不到該團購"));
         }
         Err(e) => {
             error!("取得團購資料失敗: {}", e);
-            return Ok(warp::reply::json(&serde_json::json!({
-                "ephemeral_text": "取得團購資料失敗"
-            })));
+            return Ok(ephemeral_text_json("取得團購資料失敗"));
         }
     };
 
     // 檢查狀態
     if group_buy.status != GroupBuyStatus::Active {
-        return Ok(warp::reply::json(&serde_json::json!({
-            "ephemeral_text": "⚠️ 此團購已截止，無法登記"
-        })));
+        return Ok(ephemeral_text_json("⚠️ 此團購已截止，無法登記"));
     }
 
     // 檢查是否有商品
     if group_buy.items.is_empty()
         || (group_buy.items.len() == 1 && group_buy.items.contains_key("範例商品"))
     {
-        return Ok(warp::reply::json(&serde_json::json!({
-            "ephemeral_text": "⚠️ 請先編輯商品列表"
-        })));
+        return Ok(ephemeral_text_json("⚠️ 請先編輯商品列表"));
     }
 
     // 打開登記 Dialog
@@ -229,12 +218,10 @@ async fn handle_register_action(
         super::dialogs::open_register_dialog(&state_guard.mattermost_client, &register_params).await
     {
         error!("打開登記 Dialog 失敗: {}", e);
-        return Ok(warp::reply::json(&serde_json::json!({
-            "ephemeral_text": "打開登記視窗失敗"
-        })));
+        return Ok(ephemeral_text_json("打開登記視窗失敗"));
     }
 
-    Ok(warp::reply::json(&serde_json::json!({})))
+    Ok(empty_json_reply())
 }
 
 async fn handle_cancel_register_action(

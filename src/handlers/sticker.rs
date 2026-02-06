@@ -45,10 +45,7 @@ pub async fn handle_sticker_command_impl(
         .as_ref()
         .map(|url| format!("{}/action", url.trim_end_matches('/')))
         .unwrap_or_else(|| "http://localhost/action".to_string());
-    let default_avatar_url = app_state
-        .config
-        .get_default_avatar_url()
-        .map(|avatar| app_state.config.resolve_avatar_url(&avatar));
+    let default_avatar_url = app_state.config.default_avatar_url();
     drop(app_state);
 
     let stickers = match sticker_db.search_async(&text, None).await {

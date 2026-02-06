@@ -107,29 +107,23 @@ impl Config {
         })
     }
 
-    /// 解析默認頭像 URL
-    /// 支援普通 URL 或 @username 格式
-    /// @username 會被轉換為 Mattermost 用戶頭像 API URL
-    pub fn get_default_avatar_url(&self) -> Option<String> {
+    /// 獲取預設頭像 URL（已解析）
+    /// 
+    /// 如果配置了 default_avatar:
+    /// - 若為 @username 格式，會轉換為 Mattermost 用戶頭像 API URL
+    /// - 否則直接返回 URL
+    /// 
+    /// # 返回值
+    /// - `Some(url)` - 解析後的完整 URL
+    /// - `None` - 未配置預設頭像
+    pub fn default_avatar_url(&self) -> Option<String> {
         self.mattermost.default_avatar.as_ref().map(|avatar| {
             if let Some(username) = avatar.strip_prefix('@') {
-                // @username 格式，需要先查詢用戶 ID（這裡返回 username，實際使用時需要額外處理）
-                format!("@{}", username)
+                format!("{}/api/v4/users/username/{}/image", self.mattermost.url, username)
             } else {
-                // 普通 URL
                 avatar.clone()
             }
         })
-    }
-
-    /// 獲取頭像 URL，支援 @username 格式
-    /// 如果是 @username 格式，會轉換為 Mattermost API URL
-    pub fn resolve_avatar_url(&self, avatar: &str) -> String {
-        if let Some(username) = avatar.strip_prefix('@') {
-            format!("{}/api/v4/users/username/{}/image", self.mattermost.url, username)
-        } else {
-            avatar.to_string()
-        }
     }
 }
 

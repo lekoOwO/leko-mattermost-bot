@@ -34,11 +34,24 @@ pub fn ephemeral_json_with_status(
 }
 
 /// 建立 in_channel 類型的 JSON 回應（所有人可見）
-pub fn in_channel_json_reply(text: impl Into<String>) -> warp::reply::Json {
-    warp::reply::json(&serde_json::json!({
+/// 
+/// # 參數
+/// - `text`: 回應訊息內容
+/// - `icon_url`: 可選的頭像 URL
+pub fn in_channel_json_reply(
+    text: impl Into<String>,
+    icon_url: Option<String>,
+) -> warp::reply::Json {
+    let mut response = serde_json::json!({
         "response_type": "in_channel",
         "text": text.into()
-    }))
+    });
+    
+    if let Some(url) = icon_url {
+        response["icon_url"] = serde_json::json!(url);
+    }
+    
+    warp::reply::json(&response)
 }
 
 /// 建立空的 JSON 回應
@@ -53,36 +66,30 @@ pub fn ephemeral_text_json(text: impl Into<String>) -> warp::reply::Json {
     }))
 }
 
-/// 建立 DialogSubmissionResponse 的輔助函數
-pub fn dialog_error_response(error_message: impl Into<String>) -> warp::reply::Json {
+/// 建立 Dialog 錯誤回應
+pub fn dialog_error(error_message: impl Into<String>) -> warp::reply::WithStatus<warp::reply::Json> {
     use crate::handlers::group_buy::DialogSubmissionResponse;
-    warp::reply::json(&DialogSubmissionResponse {
-        error: Some(error_message.into()),
-        text: None,
-        errors: None,
-    })
+    warp::reply::with_status(
+        warp::reply::json(&DialogSubmissionResponse {
+            error: Some(error_message.into()),
+            text: None,
+            errors: None,
+        }),
+        warp::http::StatusCode::OK,
+    )
 }
 
-/// 建立帶 HTTP 狀態碼的 Dialog 錯誤回應
-pub fn dialog_error_with_status(
-    error_message: impl Into<String>,
-) -> warp::reply::WithStatus<warp::reply::Json> {
-    warp::reply::with_status(dialog_error_response(error_message), warp::http::StatusCode::OK)
-}
-
-/// 建立空的 DialogSubmissionResponse
-pub fn dialog_empty_response() -> warp::reply::Json {
+/// 建立空的 Dialog 回應
+pub fn dialog_empty() -> warp::reply::WithStatus<warp::reply::Json> {
     use crate::handlers::group_buy::DialogSubmissionResponse;
-    warp::reply::json(&DialogSubmissionResponse {
-        error: None,
-        text: None,
-        errors: None,
-    })
-}
-
-/// 建立帶 HTTP 狀態碼的空 Dialog 回應
-pub fn dialog_empty_with_status() -> warp::reply::WithStatus<warp::reply::Json> {
-    warp::reply::with_status(dialog_empty_response(), warp::http::StatusCode::OK)
+    warp::reply::with_status(
+        warp::reply::json(&DialogSubmissionResponse {
+            error: None,
+            text: None,
+            errors: None,
+        }),
+        warp::http::StatusCode::OK,
+    )
 }
 
 /// 建立帶欄位錯誤的 DialogSubmissionResponse
@@ -109,6 +116,10 @@ pub fn get_form_field(form: &HashMap<String, String>, key: &str) -> String {
 }
 
 /// Slash Command 常用參數結構體
+/// 
+/// 注意：目前主要用於測試，實際 handler 中多使用 get_form_field 直接提取
+/// 保留此結構以便未來需要時使用
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct SlashCommandParams {
     pub text: String,

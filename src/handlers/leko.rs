@@ -56,12 +56,7 @@ pub async fn handle_leko_command(
 async fn handle_leko_help(state: Arc<RwLock<AppState>>) -> warp::reply::Json {
     info!("顯示 /leko 使用說明");
     
-    let app_state = state.read().await;
-    let icon_url = app_state
-        .config
-        .get_default_avatar_url()
-        .map(|avatar| app_state.config.resolve_avatar_url(&avatar));
-    drop(app_state);
+    let icon_url = state.read().await.config.default_avatar_url();
     
     let mut response = serde_json::json!({
         "response_type": "ephemeral",
@@ -85,21 +80,13 @@ async fn handle_admin_subcommand(
     let user_name = get_form_field(&form, "user_name");
 
     if user_id.is_empty() {
-        let app_state = state.read().await;
-        let icon_url = app_state
-            .config
-            .get_default_avatar_url()
-            .map(|avatar| app_state.config.resolve_avatar_url(&avatar));
-        drop(app_state);
+        let icon_url = state.read().await.config.default_avatar_url();
         return Ok(ephemeral_json_with_status("❌ 無法取得使用者資訊", icon_url));
     }
 
     let app_state = state.read().await;
     let is_admin = app_state.config.is_admin(&user_id, &user_name);
-    let icon_url = app_state
-        .config
-        .get_default_avatar_url()
-        .map(|avatar| app_state.config.resolve_avatar_url(&avatar));
+    let icon_url = app_state.config.default_avatar_url();
     drop(app_state);
 
     if !is_admin {
@@ -118,12 +105,7 @@ async fn handle_admin_subcommand(
     let admin_command = parts.get(1).copied().unwrap_or("");
     let response_text = websocket::handle_admin_command(admin_command, state.clone()).await;
 
-    let app_state = state.read().await;
-    let icon_url = app_state
-        .config
-        .get_default_avatar_url()
-        .map(|avatar| app_state.config.resolve_avatar_url(&avatar));
-    drop(app_state);
+    let icon_url = state.read().await.config.default_avatar_url();
 
     Ok(ephemeral_json_with_status(response_text, icon_url))
 }

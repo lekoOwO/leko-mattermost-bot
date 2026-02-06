@@ -211,7 +211,75 @@ SQLX_PREPARE_ALL=1 cargo run --bin sqlx_prepare
 
 將產生的 `.sqlx` 加入版本控制可讓其他開發者和 CI 在不需連線真實 DB 的情況下正確編譯。 
 
-## 專案結構
+## 開發
+
+### 測試
+
+專案包含完整的測試套件 (59 個測試):
+
+```bash
+# 執行所有測試
+cargo test
+
+# 執行特定模組測試
+cargo test websocket::
+cargo test validation::
+cargo test handlers::group_buy::
+
+# 查看測試覆蓋
+cargo test -- --nocapture
+```
+
+### 程式碼品質
+
+本專案已經過系統性重構 (Phase 1-3)，具備：
+
+- ✅ **完整測試覆蓋**: 59 個單元與整合測試
+- ✅ **依賴注入**: 使用 trait-based DI 支援 mock 測試
+- ✅ **模組化設計**: 清晰的關注點分離
+- ✅ **統一錯誤處理**: 一致的錯誤處理模式
+
+詳見 [REFACTOR_SUMMARY.md](./REFACTOR_SUMMARY.md) 了解重構細節。
+
+### 專案統計
+
+```bash
+# 查看專案統計資訊
+./stats.sh
+```
+
+### 程式碼結構
+
+```
+src/
+├── main.rs                 # 應用程式入口與 HTTP 伺服器
+├── config.rs               # 配置管理
+├── mattermost.rs           # Mattermost API 客戶端 + Service trait
+├── sticker.rs              # 貼圖資料庫
+├── database.rs             # SQLite 資料庫層
+├── websocket.rs            # WebSocket 客戶端
+├── constants.rs            # 常數定義 (NEW)
+├── env.rs                  # 環境變數管理 (NEW)
+├── validation.rs           # 輸入驗證 (NEW)
+├── test_utils.rs           # 測試工具與 Mock (重構)
+└── handlers/
+    ├── mod.rs              # Handler 路由
+    ├── reply_helpers.rs    # 回應輔助函數 (NEW)
+    ├── auth.rs             # 認證處理
+    ├── sticker.rs          # 貼圖 handler
+    ├── leko.rs             # /leko 指令 handler
+    └── group_buy/          # 團購功能
+        ├── mod.rs
+        ├── actions.rs      # 按鈕 action 處理
+        ├── dialogs.rs      # Dialog 管理
+        ├── messages.rs     # 訊息格式化
+        ├── utils.rs        # 工具函數
+        └── tests.rs        # 整合測試 (NEW)
+```
+
+## 專案結構 (Legacy)
+
+舊版結構說明保留供參考。最新結構請見上方「開發 > 程式碼結構」段落。
 
 ```
 .
@@ -230,6 +298,10 @@ SQLX_PREPARE_ALL=1 cargo run --bin sqlx_prepare
         └── ci.yml      # CI/CD 自動化
 
 ```
+
+## 貢獻
+
+歡迎提交 Issue 和 Pull Request！
 
 ## 授權
 

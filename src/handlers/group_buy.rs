@@ -27,12 +27,6 @@ pub use dialogs::{
     handle_adjust_shortage_dialog, handle_cancel_register_dialog, handle_create_dialog,
     handle_edit_items_dialog, handle_register_dialog,
 };
-// Re-export params structs so other modules (examples) can reuse the canonical types
-// Note: dialog param types are defined in `dialogs` and are intended to be
-// referenced directly (`crate::handlers::group_buy::dialogs::CreateDialogParams`)
-// when needed. We intentionally avoid re-exporting them here to prevent
-// unused-export warnings; add explicit `pub use` lines only when a consumer
-// outside the crate requires them.
 
 /// Slash command 參數
 #[derive(Debug, Deserialize)]
@@ -86,7 +80,7 @@ pub struct DialogSubmission {
     pub user_id: String,
     pub channel_id: String,
     pub team_id: String,
-    pub submission: HashMap<String, serde_json::Value>, // 使用 Value 以支持各種類型
+    pub submission: HashMap<String, serde_json::Value>,
     pub cancelled: Option<bool>,
 }
 
@@ -101,15 +95,12 @@ pub struct DialogSubmissionResponse {
     pub text: Option<String>,
 }
 
-/// 處理 /group_buy 或 /leko group_buy 指令
 /// 處理 /group_buy slash command（帶 token 驗證）
 pub async fn handle_group_buy_command(
     form: HashMap<String, String>,
     state: Arc<RwLock<AppState>>,
 ) -> Result<WithStatus<Json>, warp::Rejection> {
-    // 驗證 slash command token
     verify_slash_command_token(&form, &state, "group_buy").await?;
-
     handle_group_buy_command_impl(form, state).await
 }
 
@@ -119,13 +110,8 @@ pub async fn handle_group_buy_command_impl(
     state: Arc<RwLock<AppState>>,
 ) -> Result<WithStatus<Json>, warp::Rejection> {
     let req = parse_slash_command(&form);
-
     let state_guard = state.read().await;
-
-    // 取得 bot_callback_url
     let bot_callback_url = utils::bot_callback_url_from_state(&state_guard);
-
-    // 開啟建立團購的 Dialog
     let create_params = dialogs::CreateDialogParams {
         trigger_id: &req.trigger_id,
         response_url: &req.response_url,
@@ -138,11 +124,10 @@ pub async fn handle_group_buy_command_impl(
     match dialogs::open_create_dialog(state_guard.mattermost_client.as_ref(), &create_params).await {
         Ok(_) => {
             info!("用戶 {} 開啟建立團購 dialog", req.user_name);
-            // 不返回任何訊息，讓 dialog 提交後的 response_url 可以發送新訊息
             Ok(warp::reply::with_status(
                 warp::reply::json(&SlashCommandResponse {
                     response_type: "ephemeral".to_string(),
-                    text: "".to_string(), // 空訊息
+                    text: "".to_string(),
                 }),
                 StatusCode::OK,
             ))
@@ -159,6 +144,3 @@ pub async fn handle_group_buy_command_impl(
         }
     }
 }
-
-// NOTE: related action handlers were moved to `actions.rs`; helpers and
-// duplicated implementations were removed here during the refactor.

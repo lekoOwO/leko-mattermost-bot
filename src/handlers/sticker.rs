@@ -18,7 +18,6 @@ pub async fn handle_sticker_command(
     info!("請求參數: {:?}", form.keys().collect::<Vec<_>>());
     info!("完整表單內容: {:?}", form);
 
-    // 驗證 slash command token
     verify_slash_command_token(&form, &state, "stickers").await?;
 
     handle_sticker_command_impl(form, state).await
@@ -37,7 +36,6 @@ pub async fn handle_sticker_command_impl(
     info!("搜尋關鍵字: '{}', 使用者: {}", text, user_name);
 
     let app_state = state.read().await;
-    // clone DB-backed sticker database before awaiting
     let sticker_db = app_state.sticker_database.clone();
     let mattermost_url = app_state.config.mattermost.url.clone();
     let callback_url = app_state
@@ -49,7 +47,6 @@ pub async fn handle_sticker_command_impl(
         .unwrap_or_else(|| "http://localhost/action".to_string());
     drop(app_state);
 
-    // 搜尋貼圖（不限分類）
     let stickers = match sticker_db.search_async(&text, None).await {
         Ok(v) => v.into_iter().take(25).collect::<Vec<_>>(),
         Err(e) => {
@@ -59,7 +56,6 @@ pub async fn handle_sticker_command_impl(
     };
 
     if stickers.is_empty() {
-        // 沒有找到貼圖
         let message = if text.is_empty() {
             "沒有可用的貼圖".to_string()
         } else {
@@ -68,7 +64,6 @@ pub async fn handle_sticker_command_impl(
         return Ok(ephemeral_json_reply(message));
     }
 
-    // 建立貼圖選項
     let sticker_options: Vec<ActionOption> = stickers
         .iter()
         .enumerate()
@@ -80,7 +75,6 @@ pub async fn handle_sticker_command_impl(
 
     let stickers_count = sticker_options.len();
 
-    // 建立 Interactive Message
     let attachment = Attachment {
         fallback: Some("選擇貼圖".to_string()),
         color: Some("#3AA3E3".to_string()),
@@ -129,7 +123,6 @@ pub async fn handle_sticker_command_impl(
         ]),
     };
 
-    // 透過 response_url 發送 Interactive Message
     let response_payload = serde_json::json!({
         "response_type": "in_channel",
         "username": user_name,

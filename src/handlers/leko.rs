@@ -26,45 +26,33 @@ pub async fn handle_leko_command(
 
     let text = get_form_field(&form, "text");
     let text_trimmed = text.trim();
-
-    // 解析子指令
     let parts: Vec<&str> = text_trimmed.split_whitespace().collect();
     let subcommand = parts.first().copied().unwrap_or("");
 
     match subcommand {
-        "" => {
-            // 無參數，顯示 help
-            Ok(warp::reply::with_status(handle_leko_help(), StatusCode::OK))
-        }
-        "help" => {
-            // 顯示 help
+        "" | "help" => {
             Ok(warp::reply::with_status(handle_leko_help(), StatusCode::OK))
         }
         "admin" => {
-            // 管理功能
             handle_admin_subcommand(&parts, form, state).await
         }
         "group_buy" => {
-            // 團購功能 - 使用內部實現，跳過 token 驗證（已在 leko 層級驗證過）
             handle_group_buy_command_impl(form, state).await
         }
         "sticker" => {
-            // 取得 sticker 後面的關鍵字
             let keyword = parts.get(1..).map(|s| s.join(" ")).unwrap_or_default();
-            // 建立新的 form，將 text 替換成關鍵字
             let mut sticker_form = form.clone();
             sticker_form.insert("text".to_string(), keyword);
             let response = handle_sticker_command_impl(sticker_form, state).await?;
             Ok(warp::reply::with_status(response, StatusCode::OK))
         }
         _ => {
-            // 未知的子指令，顯示 help
             Ok(warp::reply::with_status(handle_leko_help(), StatusCode::OK))
         }
     }
 }
 
-/// 處理 /leko help - 顯示使用說明
+/// 顯示使用說明
 fn handle_leko_help() -> warp::reply::Json {
     info!("顯示 /leko 使用說明");
     warp::reply::json(&serde_json::json!({
@@ -79,7 +67,6 @@ async fn handle_admin_subcommand(
     form: std::collections::HashMap<String, String>,
     state: Arc<RwLock<AppState>>,
 ) -> Result<warp::reply::WithStatus<warp::reply::Json>, warp::Rejection> {
-    // 取得使用者資訊
     let user_id = get_form_field(&form, "user_id");
     let user_name = get_form_field(&form, "user_name");
 
@@ -87,7 +74,6 @@ async fn handle_admin_subcommand(
         return Ok(ephemeral_json_with_status("❌ 無法取得使用者資訊"));
     }
 
-    // 檢查是否為管理員
     let app_state = state.read().await;
     let is_admin = app_state.config.is_admin(&user_id, &user_name);
     drop(app_state);
@@ -104,10 +90,7 @@ async fn handle_admin_subcommand(
 
     info!("管理員 {} ({}) 使用 admin 指令", user_name, user_id);
 
-    // 取得 admin 後面的指令
     let admin_command = parts.get(1).copied().unwrap_or("");
-
-    // 呼叫 websocket 的管理指令處理函數
     let response_text = websocket::handle_admin_command(admin_command, state).await;
 
     Ok(ephemeral_json_with_status(response_text))

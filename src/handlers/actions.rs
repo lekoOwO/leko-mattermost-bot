@@ -18,7 +18,6 @@ pub async fn handle_action(
         serde_json::to_string_pretty(&action_req.context).unwrap_or_default()
     );
 
-    // 權限檢查：只有觸發指令的使用者才能操作
     let original_user_id = action_req
         .context
         .get("user_id")
@@ -54,7 +53,6 @@ pub async fn handle_action(
     }
 }
 
-/// 取消：清空訊息
 fn handle_cancel() -> Result<warp::reply::Json, warp::Rejection> {
     info!("使用者取消了貼圖選擇");
     Ok(warp::reply::json(&serde_json::json!({
@@ -65,7 +63,6 @@ fn handle_cancel() -> Result<warp::reply::Json, warp::Rejection> {
     })))
 }
 
-/// 選擇貼圖：顯示預覽和發送/取消按鈕
 async fn handle_select_sticker(
     action_req: &ActionRequest,
     state: Arc<RwLock<AppState>>,
@@ -223,7 +220,6 @@ async fn handle_select_sticker(
     })))
 }
 
-/// 發送貼圖：將訊息替換成貼圖
 async fn handle_send_sticker(
     action_req: &ActionRequest,
     state: Arc<RwLock<AppState>>,
@@ -263,7 +259,6 @@ async fn handle_send_sticker(
     let mattermost_url = app_state.config.mattermost.url.clone();
     drop(app_state);
 
-    // 替換訊息為貼圖，並設定 override_username 和 override_icon_url
     let sticker_message = format!("![{}]({})", sticker_name, sticker_image_url);
 
     Ok(warp::reply::json(&serde_json::json!({

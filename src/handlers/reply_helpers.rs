@@ -147,6 +147,6 @@ mod tests {
         assert_eq!(params.text, "test text");
         assert_eq!(params.user_id, "user123");
         assert_eq!(params.user_name, "testuser");
-        assert_eq!(params.channel_id, ""); // 沒有提供，應該是空字串
+        assert_eq!(params.channel_id, "");
     }
 }

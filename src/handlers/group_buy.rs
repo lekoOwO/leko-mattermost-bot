@@ -11,7 +11,7 @@ use warp::reply::{Json, WithStatus};
 use super::auth::verify_slash_command_token;
 use crate::AppState;
 use crate::database::{GroupBuy, GroupBuyOrder, GroupBuyStatus};
-use crate::mattermost::{DialogElement, DialogElementType, DialogOption, MattermostClient};
+use crate::mattermost::{DialogElement, DialogElementType, DialogOption};
 
 mod messages;
 pub use messages::{
@@ -20,6 +20,8 @@ pub use messages::{
 mod actions;
 mod dialogs;
 mod utils;
+#[cfg(test)]
+mod tests;
 pub use actions::handle_group_buy_action;
 pub use dialogs::{
     handle_adjust_shortage_dialog, handle_cancel_register_dialog, handle_create_dialog,
@@ -100,6 +102,7 @@ pub struct DialogSubmissionResponse {
 }
 
 /// 處理 /group_buy 或 /leko group_buy 指令
+/// 處理 /group_buy slash command（帶 token 驗證）
 pub async fn handle_group_buy_command(
     form: HashMap<String, String>,
     state: Arc<RwLock<AppState>>,
@@ -107,6 +110,14 @@ pub async fn handle_group_buy_command(
     // 驗證 slash command token
     verify_slash_command_token(&form, &state, "group_buy").await?;
 
+    handle_group_buy_command_impl(form, state).await
+}
+
+/// 處理團購指令的實際邏輯（可被 /group_buy 和 /leko group_buy 共用）
+pub async fn handle_group_buy_command_impl(
+    form: HashMap<String, String>,
+    state: Arc<RwLock<AppState>>,
+) -> Result<WithStatus<Json>, warp::Rejection> {
     let req = parse_slash_command(&form);
 
     let state_guard = state.read().await;

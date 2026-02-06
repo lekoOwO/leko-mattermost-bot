@@ -26,6 +26,9 @@ pub trait MattermostService: Send + Sync {
         introduction_text: Option<&str>,
         state: Option<&str>,
     ) -> Result<()>;
+    
+    /// 用於 downcast 到具體型別（主要用於測試）
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 #[derive(Debug, Clone)]
@@ -654,6 +657,10 @@ impl MattermostService for MattermostClient {
         state: Option<&str>,
     ) -> Result<()> {
         self.open_dialog(trigger_id, url, title, elements, submit_label, introduction_text, state).await
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 

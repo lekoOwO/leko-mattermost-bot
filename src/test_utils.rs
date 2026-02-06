@@ -75,6 +75,10 @@ pub mod utils {
             self.posts.lock().unwrap().clone()
         }
 
+        pub fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+
         fn log_call(&self, method: &str) {
             self.call_log.lock().unwrap().push(method.to_string());
         }
@@ -200,6 +204,10 @@ pub mod utils {
             self.log_call("open_dialog");
             self.check_error()?;
             Ok(())
+        }
+
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
         }
     }
 

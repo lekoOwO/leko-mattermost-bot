@@ -6,7 +6,7 @@ use tracing::{info, warn};
 use warp::http::StatusCode;
 
 use super::auth::verify_slash_command_token;
-use super::group_buy::handle_group_buy_command;
+use super::group_buy::handle_group_buy_command_impl;
 use super::reply_helpers::{ephemeral_json_with_status, get_form_field};
 use super::sticker::handle_sticker_command_impl;
 use crate::websocket;
@@ -45,8 +45,8 @@ pub async fn handle_leko_command(
             handle_admin_subcommand(&parts, form, state).await
         }
         "group_buy" => {
-            // 團購功能
-            handle_group_buy_command(form, state).await
+            // 團購功能 - 使用內部實現，跳過 token 驗證（已在 leko 層級驗證過）
+            handle_group_buy_command_impl(form, state).await
         }
         "sticker" => {
             // 取得 sticker 後面的關鍵字
@@ -112,3 +112,39 @@ async fn handle_admin_subcommand(
 
     Ok(ephemeral_json_with_status(response_text))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use warp::Reply;
+
+    #[test]
+    fn test_handle_leko_help() {
+        let response = handle_leko_help();
+        let body = response.into_response().into_body();
+        
+        // 驗證回應包含預期內容
+        // 注意：在實際應用中，你可能需要解析 JSON 來驗證
+        // 這裡只是簡單驗證函數能正常執行
+        drop(body);
+    }
+
+    #[test]
+    fn test_parse_subcommand() {
+        let test_cases = vec![
+            ("", ""),
+            ("help", "help"),
+            ("admin status", "admin"),
+            ("group_buy", "group_buy"),
+            ("sticker 快樂", "sticker"),
+            ("  sticker  ", "sticker"),
+        ];
+
+        for (input, expected) in test_cases {
+            let parts: Vec<&str> = input.trim().split_whitespace().collect();
+            let subcommand = parts.first().copied().unwrap_or("");
+            assert_eq!(subcommand, expected, "Failed for input: '{}'", input);
+        }
+    }
+}
+

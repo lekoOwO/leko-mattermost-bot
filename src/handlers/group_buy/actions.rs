@@ -254,9 +254,7 @@ async fn handle_cancel_register_action(
         .unwrap_or_default();
 
     if orders.is_empty() {
-        return Ok(warp::reply::json(&serde_json::json!({
-            "ephemeral_text": "目前沒有任何登記可供取消"
-        })));
+        return Ok(ephemeral_text_json("目前沒有任何登記可供取消"));
     }
 
     use std::collections::HashMap;
@@ -304,12 +302,10 @@ async fn handle_cancel_register_action(
             .await
     {
         error!("打開取消登記 Dialog 失敗: {}", e);
-        return Ok(warp::reply::json(&serde_json::json!({
-            "ephemeral_text": "打開取消登記視窗失敗"
-        })));
+        return Ok(ephemeral_text_json("打開取消登記視窗失敗"));
     }
 
-    Ok(warp::reply::json(&serde_json::json!({})))
+    Ok(empty_json_reply())
 }
 
 async fn handle_close_action(
@@ -336,16 +332,12 @@ async fn handle_close_action(
 
     // 檢查權限：只有建立者可以截止
     if group_buy.creator_id != action_req.user_id {
-        return Ok(warp::reply::json(&serde_json::json!({
-            "ephemeral_text": "⚠️ 只有團購建立者可以截止"
-        })));
+        return Ok(ephemeral_text_json("⚠️ 只有團購建立者可以截止"));
     }
 
     // 檢查狀態
     if group_buy.status != GroupBuyStatus::Active {
-        return Ok(warp::reply::json(&serde_json::json!({
-            "ephemeral_text": "⚠️ 此團購已截止"
-        })));
+        return Ok(ephemeral_text_json("⚠️ 此團購已截止"));
     }
 
     // 取得用戶資訊
@@ -357,9 +349,7 @@ async fn handle_close_action(
         Ok(u) => u,
         Err(e) => {
             error!("取得用戶資訊失敗: {}", e);
-            return Ok(warp::reply::json(&serde_json::json!({
-                "ephemeral_text": "無法取得用戶資訊"
-            })));
+            return Ok(ephemeral_text_json("無法取得用戶資訊"));
         }
     };
 
@@ -376,18 +366,14 @@ async fn handle_close_action(
         .await
     {
         error!("更新狀態失敗: {}", e);
-        return Ok(warp::reply::json(&serde_json::json!({
-            "ephemeral_text": format!("截止失敗: {}", e)
-        })));
+        return Ok(ephemeral_text_json(format!("截止失敗: {}", e)));
     }
 
     // 重新取得團購資料
     let group_buy = match state_guard.database.get_group_buy(group_buy_id).await {
         Ok(Some(gb)) => gb,
         _ => {
-            return Ok(warp::reply::json(&serde_json::json!({
-                "ephemeral_text": "取得團購資料失敗"
-            })));
+            return Ok(ephemeral_text_json("取得團購資料失敗"));
         }
     };
 
@@ -447,16 +433,12 @@ async fn handle_reopen_action(
 
     // 檢查權限：只有建立者可以重新開放
     if group_buy.creator_id != action_req.user_id {
-        return Ok(warp::reply::json(&serde_json::json!({
-            "ephemeral_text": "⚠️ 只有團購建立者可以重新開放"
-        })));
+        return Ok(ephemeral_text_json("⚠️ 只有團購建立者可以重新開放"));
     }
 
     // 檢查狀態
     if group_buy.status != GroupBuyStatus::Closed {
-        return Ok(warp::reply::json(&serde_json::json!({
-            "ephemeral_text": "⚠️ 此團購尚未截止"
-        })));
+        return Ok(ephemeral_text_json("⚠️ 此團購尚未截止"));
     }
 
     // 取得用戶資訊
@@ -468,9 +450,7 @@ async fn handle_reopen_action(
         Ok(u) => u,
         Err(e) => {
             error!("取得用戶資訊失敗: {}", e);
-            return Ok(warp::reply::json(&serde_json::json!({
-                "ephemeral_text": "無法取得用戶資訊"
-            })));
+            return Ok(ephemeral_text_json("無法取得用戶資訊"));
         }
     };
 
@@ -487,18 +467,14 @@ async fn handle_reopen_action(
         .await
     {
         error!("更新狀態失敗: {}", e);
-        return Ok(warp::reply::json(&serde_json::json!({
-            "ephemeral_text": format!("重新開放失敗: {}", e)
-        })));
+        return Ok(ephemeral_text_json(format!("重新開放失敗: {}", e)));
     }
 
     // 重新取得團購資料
     let group_buy = match state_guard.database.get_group_buy(group_buy_id).await {
         Ok(Some(gb)) => gb,
         _ => {
-            return Ok(warp::reply::json(&serde_json::json!({
-                "ephemeral_text": "取得團購資料失敗"
-            })));
+            return Ok(ephemeral_text_json("取得團購資料失敗"));
         }
     };
 
@@ -558,16 +534,12 @@ async fn handle_adjust_shortage_action(
 
     // 檢查權限：只有建立者可以調整
     if group_buy.creator_id != action_req.user_id {
-        return Ok(warp::reply::json(&serde_json::json!({
-            "ephemeral_text": "⚠️ 只有團購建立者可以調整缺貨"
-        })));
+        return Ok(ephemeral_text_json("⚠️ 只有團購建立者可以調整缺貨"));
     }
 
     // 檢查狀態：只有 Closed 可以調整
     if group_buy.status != GroupBuyStatus::Closed {
-        return Ok(warp::reply::json(&serde_json::json!({
-            "ephemeral_text": "⚠️ 只有已截止的團購可以調整缺貨"
-        })));
+        return Ok(ephemeral_text_json("⚠️ 只有已截止的團購可以調整缺貨"));
     }
 
     // 取得訂單
@@ -579,16 +551,12 @@ async fn handle_adjust_shortage_action(
         Ok(o) => o,
         Err(e) => {
             error!("取得訂單失敗: {}", e);
-            return Ok(warp::reply::json(&serde_json::json!({
-                "ephemeral_text": "取得訂單失敗"
-            })));
+            return Ok(ephemeral_text_json("取得訂單失敗"));
         }
     };
 
     if orders.is_empty() {
-        return Ok(warp::reply::json(&serde_json::json!({
-            "ephemeral_text": "尚無登記資料"
-        })));
+        return Ok(ephemeral_text_json("尚無登記資料"));
     }
 
     // 打開調整缺貨 Dialog
@@ -612,12 +580,10 @@ async fn handle_adjust_shortage_action(
             .await
     {
         error!("打開調整缺貨 Dialog 失敗: {}", e);
-        return Ok(warp::reply::json(&serde_json::json!({
-            "ephemeral_text": "打開調整視窗失敗"
-        })));
+        return Ok(ephemeral_text_json("打開調整視窗失敗"));
     }
 
-    Ok(warp::reply::json(&serde_json::json!({})))
+    Ok(empty_json_reply())
 }
 
 async fn handle_shopping_list_action(
@@ -716,9 +682,7 @@ async fn handle_shopping_list_action(
 
     msg.push_str(&format!("\n**💰 總金額：NT${}**", total_amount));
 
-    Ok(warp::reply::json(&serde_json::json!({
-        "ephemeral_text": msg
-    })))
+    Ok(ephemeral_text_json(msg))
 }
 
 async fn handle_subtotal_action(

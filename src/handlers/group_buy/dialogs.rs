@@ -1,4 +1,5 @@
 use super::*;
+use crate::handlers::reply_helpers::{dialog_error_with_status, dialog_empty_with_status, dialog_field_error};
 use chrono::Utc;
 use std::collections::HashMap;
 
@@ -111,14 +112,7 @@ pub async fn handle_create_dialog(
     info!("成功解析 Dialog submission");
 
     if submission.cancelled == Some(true) {
-        return Ok(warp::reply::with_status(
-            warp::reply::json(&DialogSubmissionResponse {
-                error: None,
-                text: None,
-                errors: None,
-            }),
-            StatusCode::OK,
-        ));
+        return Ok(dialog_empty_with_status());
     }
 
     let state_data = serde_json::from_str(submission.state.as_deref().unwrap_or("{}"))
@@ -146,14 +140,7 @@ pub async fn handle_create_dialog(
 
     if response_url.is_empty() {
         error!("response_url 為空");
-        return Ok(warp::reply::with_status(
-            warp::reply::json(&DialogSubmissionResponse {
-                error: Some("內部錯誤：缺少 response_url".to_string()),
-                text: None,
-                errors: None,
-            }),
-            StatusCode::OK,
-        ));
+        return Ok(dialog_error_with_status("內部錯誤：缺少 response_url"));
     }
 
     let merchant_name = submission
@@ -178,18 +165,7 @@ pub async fn handle_create_dialog(
             match serde_yaml::from_str(&yaml_str) {
                 Ok(data) => data,
                 Err(e) => {
-                    return Ok(warp::reply::with_status(
-                        warp::reply::json(&DialogSubmissionResponse {
-                            error: None,
-                            text: None,
-                            errors: Some(
-                                [("metadata".to_string(), format!("YAML 格式錯誤: {}", e))]
-                                    .into_iter()
-                                    .collect(),
-                            ),
-                        }),
-                        StatusCode::OK,
-                    ));
+                    return Ok(dialog_field_error("metadata", format!("YAML 格式錯誤: {}", e)));
                 }
             }
         } else {
@@ -211,14 +187,7 @@ pub async fn handle_create_dialog(
         Ok(u) => u,
         Err(e) => {
             error!("取得用戶資訊失敗: {}", e);
-            return Ok(warp::reply::with_status(
-                warp::reply::json(&DialogSubmissionResponse {
-                    error: Some("無法取得用戶資訊".to_string()),
-                    text: None,
-                    errors: None,
-                }),
-                StatusCode::OK,
-            ));
+            return Ok(dialog_error_with_status("無法取得用戶資訊"));
         }
     };
 
@@ -254,14 +223,7 @@ pub async fn handle_create_dialog(
 
     if let Err(e) = response {
         error!("發送到 response_url 失敗: {}", e);
-        return Ok(warp::reply::with_status(
-            warp::reply::json(&DialogSubmissionResponse {
-                error: Some(format!("建立團購訊息失敗: {}", e)),
-                text: None,
-                errors: None,
-            }),
-            StatusCode::OK,
-        ));
+        return Ok(dialog_error_with_status(format!("建立團購訊息失敗: {}", e)));
     }
 
     let response = response.unwrap();
@@ -273,14 +235,7 @@ pub async fn handle_create_dialog(
             "發送到 response_url 失敗，狀態碼: {}, 回應: {}",
             status_code, response_text
         );
-        return Ok(warp::reply::with_status(
-            warp::reply::json(&DialogSubmissionResponse {
-                error: Some(format!("建立團購訊息失敗: HTTP {}", status_code)),
-                text: None,
-                errors: None,
-            }),
-            StatusCode::OK,
-        ));
+        return Ok(dialog_error_with_status(format!("建立團購訊息失敗: HTTP {}", status_code)));
     }
 
     let post_id = None;
@@ -304,14 +259,7 @@ pub async fn handle_create_dialog(
 
     if let Err(e) = state_guard.database.create_group_buy(&group_buy).await {
         error!("儲存團購到資料庫失敗: {}", e);
-        return Ok(warp::reply::with_status(
-            warp::reply::json(&DialogSubmissionResponse {
-                error: Some(format!("儲存團購資料失敗: {}", e)),
-                text: None,
-                errors: None,
-            }),
-            StatusCode::OK,
-        ));
+        return Ok(dialog_error_with_status(format!("儲存團購資料失敗: {}", e)));
     }
 
     info!(
@@ -319,14 +267,7 @@ pub async fn handle_create_dialog(
         user.username, merchant_name, group_buy_id
     );
 
-    Ok(warp::reply::with_status(
-        warp::reply::json(&DialogSubmissionResponse {
-            error: None,
-            text: None,
-            errors: None,
-        }),
-        StatusCode::OK,
-    ))
+    Ok(dialog_empty_with_status())
 }
 
 // helpers: items_to_yaml & parse_items_yaml
@@ -487,34 +428,12 @@ pub async fn handle_edit_items_dialog(
     let items = match parse_items_yaml(items_yaml) {
         Ok(items) => items,
         Err(e) => {
-            return Ok(warp::reply::with_status(
-                warp::reply::json(&DialogSubmissionResponse {
-                    error: None,
-                    text: None,
-                    errors: Some(
-                        [("items".to_string(), format!("YAML 格式錯誤: {}", e))]
-                            .into_iter()
-                            .collect(),
-                    ),
-                }),
-                StatusCode::OK,
-            ));
+            return Ok(dialog_field_error("items", format!("YAML 格式錯誤: {}", e)));
         }
     };
 
     if items.is_empty() {
-        return Ok(warp::reply::with_status(
-            warp::reply::json(&DialogSubmissionResponse {
-                error: None,
-                text: None,
-                errors: Some(
-                    [("items".to_string(), "至少需要一個商品".to_string())]
-                        .into_iter()
-                        .collect(),
-                ),
-            }),
-            StatusCode::OK,
-        ));
+        return Ok(dialog_field_error("items", "至少需要一個商品"));
     }
 
     let state_guard = state.read().await;
@@ -527,14 +446,7 @@ pub async fn handle_edit_items_dialog(
         Ok(u) => u,
         Err(e) => {
             error!("取得用戶資訊失敗: {}", e);
-            return Ok(warp::reply::with_status(
-                warp::reply::json(&DialogSubmissionResponse {
-                    error: Some("無法取得用戶資訊".to_string()),
-                    text: None,
-                    errors: None,
-                }),
-                StatusCode::OK,
-            ));
+            return Ok(dialog_error_with_status("無法取得用戶資訊"));
         }
     };
 
@@ -550,39 +462,18 @@ pub async fn handle_edit_items_dialog(
         .await
     {
         error!("更新商品列表失敗: {}", e);
-        return Ok(warp::reply::with_status(
-            warp::reply::json(&DialogSubmissionResponse {
-                error: Some(format!("更新失敗: {}", e)),
-                text: None,
-                errors: None,
-            }),
-            StatusCode::OK,
-        ));
+        return Ok(dialog_error_with_status(format!("更新失敗: {}", e)));
     }
 
     let group_buy = match state_guard.database.get_group_buy(&group_buy_id).await {
         Ok(Some(gb)) => gb,
         Ok(None) => {
             error!("更新後找不到團購資料");
-            return Ok(warp::reply::with_status(
-                warp::reply::json(&DialogSubmissionResponse {
-                    error: Some("內部錯誤：找不到團購資料".to_string()),
-                    text: None,
-                    errors: None,
-                }),
-                StatusCode::OK,
-            ));
+            return Ok(dialog_error_with_status("內部錯誤：找不到團購資料"));
         }
         Err(e) => {
             error!("取得團購資料失敗: {}", e);
-            return Ok(warp::reply::with_status(
-                warp::reply::json(&DialogSubmissionResponse {
-                    error: Some("內部錯誤".to_string()),
-                    text: None,
-                    errors: None,
-                }),
-                StatusCode::OK,
-            ));
+            return Ok(dialog_error_with_status("內部錯誤"));
         }
     };
 
@@ -629,14 +520,7 @@ pub async fn handle_edit_items_dialog(
         }
     });
 
-    Ok(warp::reply::with_status(
-        warp::reply::json(&DialogSubmissionResponse {
-            error: None,
-            text: None,
-            errors: None,
-        }),
-        StatusCode::OK,
-    ))
+    Ok(dialog_empty_with_status())
 }
 
 // Cancel register: open + handle
@@ -733,14 +617,7 @@ pub async fn handle_cancel_register_dialog(
         .unwrap_or("");
 
     if target_buyer.is_empty() {
-        return Ok(warp::reply::with_status(
-            warp::reply::json(&DialogSubmissionResponse {
-                error: Some("請選擇要取消的被登記人".to_string()),
-                text: None,
-                errors: None,
-            }),
-            StatusCode::OK,
-        ));
+        return Ok(dialog_error_with_status("請選擇要取消的被登記人"));
     }
 
     let state_guard = state.read().await;
@@ -753,14 +630,7 @@ pub async fn handle_cancel_register_dialog(
         Ok(u) => u,
         Err(e) => {
             error!("取得操作使用者資訊失敗: {}", e);
-            return Ok(warp::reply::with_status(
-                warp::reply::json(&DialogSubmissionResponse {
-                    error: Some("內部錯誤：無法取得使用者資訊".to_string()),
-                    text: None,
-                    errors: None,
-                }),
-                StatusCode::OK,
-            ));
+            return Ok(dialog_error_with_status("內部錯誤：無法取得使用者資訊"));
         }
     };
 
@@ -779,25 +649,11 @@ pub async fn handle_cancel_register_dialog(
         }
         Err(e) => {
             error!("刪除訂單失敗: {}", e);
-            return Ok(warp::reply::with_status(
-                warp::reply::json(&DialogSubmissionResponse {
-                    error: Some(format!("刪除失敗: {}", e)),
-                    text: None,
-                    errors: None,
-                }),
-                StatusCode::OK,
-            ));
+            return Ok(dialog_error_with_status(format!("刪除失敗: {}", e)));
         }
     }
 
-    Ok(warp::reply::with_status(
-        warp::reply::json(&DialogSubmissionResponse {
-            error: None,
-            text: None,
-            errors: None,
-        }),
-        StatusCode::OK,
-    ))
+    Ok(dialog_empty_with_status())
 }
 
 // Open register dialog
@@ -957,18 +813,7 @@ pub async fn handle_register_dialog(
     let quantity: i32 = match quantity_str.parse() {
         Ok(q) if q >= 0 => q,
         _ => {
-            return Ok(warp::reply::with_status(
-                warp::reply::json(&DialogSubmissionResponse {
-                    error: None,
-                    text: None,
-                    errors: Some(
-                        [("quantity".to_string(), "數量必須是正整數".to_string())]
-                            .into_iter()
-                            .collect(),
-                    ),
-                }),
-                StatusCode::OK,
-            ));
+            return Ok(dialog_field_error("quantity", "數量必須是正整數"));
         }
     };
 
@@ -978,14 +823,7 @@ pub async fn handle_register_dialog(
         Ok(u) => u,
         Err(e) => {
             error!("取得購買人資訊失敗: {}", e);
-            return Ok(warp::reply::with_status(
-                warp::reply::json(&DialogSubmissionResponse {
-                    error: Some("無法取得購買人資訊".to_string()),
-                    text: None,
-                    errors: None,
-                }),
-                StatusCode::OK,
-            ));
+            return Ok(dialog_error_with_status("無法取得購買人資訊"));
         }
     };
 
@@ -997,42 +835,21 @@ pub async fn handle_register_dialog(
         Ok(u) => u,
         Err(e) => {
             error!("取得登記人資訊失敗: {}", e);
-            return Ok(warp::reply::with_status(
-                warp::reply::json(&DialogSubmissionResponse {
-                    error: Some("無法取得登記人資訊".to_string()),
-                    text: None,
-                    errors: None,
-                }),
-                StatusCode::OK,
-            ));
+            return Ok(dialog_error_with_status("無法取得登記人資訊"));
         }
     };
 
     let group_buy = match state_guard.database.get_group_buy(&group_buy_id).await {
         Ok(Some(gb)) => gb,
         _ => {
-            return Ok(warp::reply::with_status(
-                warp::reply::json(&DialogSubmissionResponse {
-                    error: Some("找不到該團購".to_string()),
-                    text: None,
-                    errors: None,
-                }),
-                StatusCode::OK,
-            ));
+            return Ok(dialog_error_with_status("找不到該團購"));
         }
     };
 
     let unit_price = match group_buy.items.get(item_name) {
         Some(&price) => price,
         None => {
-            return Ok(warp::reply::with_status(
-                warp::reply::json(&DialogSubmissionResponse {
-                    error: Some("商品不存在".to_string()),
-                    text: None,
-                    errors: None,
-                }),
-                StatusCode::OK,
-            ));
+            return Ok(dialog_error_with_status("商品不存在"));
         }
     };
 
@@ -1056,25 +873,11 @@ pub async fn handle_register_dialog(
             }
             Err(e) => {
                 error!("刪除登記失敗: {}", e);
-                return Ok(warp::reply::with_status(
-                    warp::reply::json(&DialogSubmissionResponse {
-                        error: Some(format!("刪除失敗: {}", e)),
-                        text: None,
-                        errors: None,
-                    }),
-                    StatusCode::OK,
-                ));
+                return Ok(dialog_error_with_status(format!("刪除失敗: {}", e)));
             }
         }
 
-        return Ok(warp::reply::with_status(
-            warp::reply::json(&DialogSubmissionResponse {
-                error: None,
-                text: None,
-                errors: None,
-            }),
-            StatusCode::OK,
-        ));
+        return Ok(dialog_empty_with_status());
     }
 
     let order = GroupBuyOrder {
@@ -1093,14 +896,7 @@ pub async fn handle_register_dialog(
 
     if let Err(e) = state_guard.database.create_order(&order).await {
         error!("建立訂單失敗: {}", e);
-        return Ok(warp::reply::with_status(
-            warp::reply::json(&DialogSubmissionResponse {
-                error: Some(format!("登記失敗: {}", e)),
-                text: None,
-                errors: None,
-            }),
-            StatusCode::OK,
-        ));
+        return Ok(dialog_error_with_status(format!("登記失敗: {}", e)));
     }
 
     info!(
@@ -1108,14 +904,7 @@ pub async fn handle_register_dialog(
         registrar.username, buyer.username, item_name, quantity
     );
 
-    Ok(warp::reply::with_status(
-        warp::reply::json(&DialogSubmissionResponse {
-            error: None,
-            text: None,
-            errors: None,
-        }),
-        StatusCode::OK,
-    ))
+    Ok(dialog_empty_with_status())
 }
 
 // Open adjust shortage dialog
@@ -1265,30 +1054,12 @@ pub async fn handle_adjust_shortage_dialog(
     let adjustments = match parse_adjustments_yaml(adjustments_yaml) {
         Ok(adj) => adj,
         Err(e) => {
-            return Ok(warp::reply::with_status(
-                warp::reply::json(&DialogSubmissionResponse {
-                    error: None,
-                    text: None,
-                    errors: Some(
-                        [("adjustments".to_string(), format!("YAML 格式錯誤: {}", e))]
-                            .into_iter()
-                            .collect(),
-                    ),
-                }),
-                StatusCode::OK,
-            ));
+            return Ok(dialog_field_error("adjustments", format!("YAML 格式錯誤: {}", e)));
         }
     };
 
     if adjustments.is_empty() {
-        return Ok(warp::reply::with_status(
-            warp::reply::json(&DialogSubmissionResponse {
-                error: Some("沒有需要調整的訂單".to_string()),
-                text: None,
-                errors: None,
-            }),
-            StatusCode::OK,
-        ));
+        return Ok(dialog_error_with_status("沒有需要調整的訂單"));
     }
 
     let state_guard = state.read().await;
@@ -1301,14 +1072,7 @@ pub async fn handle_adjust_shortage_dialog(
         Ok(u) => u,
         Err(e) => {
             error!("取得用戶資訊失敗: {}", e);
-            return Ok(warp::reply::with_status(
-                warp::reply::json(&DialogSubmissionResponse {
-                    error: Some("無法取得用戶資訊".to_string()),
-                    text: None,
-                    errors: None,
-                }),
-                StatusCode::OK,
-            ));
+            return Ok(dialog_error_with_status("無法取得用戶資訊"));
         }
     };
 
@@ -1321,39 +1085,18 @@ pub async fn handle_adjust_shortage_dialog(
             .await
         {
             error!("調整訂單 {} 數量失敗: {}", order_id, e);
-            return Ok(warp::reply::with_status(
-                warp::reply::json(&DialogSubmissionResponse {
-                    error: Some(format!("調整訂單失敗: {}", e)),
-                    text: None,
-                    errors: None,
-                }),
-                StatusCode::OK,
-            ));
+            return Ok(dialog_error_with_status(format!("調整訂單失敗: {}", e)));
         }
     }
 
     let _group_buy = match state_guard.database.get_group_buy(&group_buy_id).await {
         Ok(Some(gb)) => gb,
         _ => {
-            return Ok(warp::reply::with_status(
-                warp::reply::json(&DialogSubmissionResponse {
-                    error: Some("取得團購資料失敗".to_string()),
-                    text: None,
-                    errors: None,
-                }),
-                StatusCode::OK,
-            ));
+            return Ok(dialog_error_with_status("取得團購資料失敗"));
         }
     };
 
     info!("{} 調整了團購 {} 的缺貨", user.username, group_buy_id);
 
-    Ok(warp::reply::with_status(
-        warp::reply::json(&DialogSubmissionResponse {
-            error: None,
-            text: None,
-            errors: None,
-        }),
-        StatusCode::OK,
-    ))
+    Ok(dialog_empty_with_status())
 }

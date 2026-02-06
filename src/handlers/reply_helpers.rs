@@ -38,6 +38,56 @@ pub fn ephemeral_text_json(text: impl Into<String>) -> warp::reply::Json {
     }))
 }
 
+/// 建立 DialogSubmissionResponse 的輔助函數
+pub fn dialog_error_response(error_message: impl Into<String>) -> warp::reply::Json {
+    use crate::handlers::group_buy::DialogSubmissionResponse;
+    warp::reply::json(&DialogSubmissionResponse {
+        error: Some(error_message.into()),
+        text: None,
+        errors: None,
+    })
+}
+
+/// 建立帶 HTTP 狀態碼的 Dialog 錯誤回應
+pub fn dialog_error_with_status(
+    error_message: impl Into<String>,
+) -> warp::reply::WithStatus<warp::reply::Json> {
+    warp::reply::with_status(dialog_error_response(error_message), warp::http::StatusCode::OK)
+}
+
+/// 建立空的 DialogSubmissionResponse
+pub fn dialog_empty_response() -> warp::reply::Json {
+    use crate::handlers::group_buy::DialogSubmissionResponse;
+    warp::reply::json(&DialogSubmissionResponse {
+        error: None,
+        text: None,
+        errors: None,
+    })
+}
+
+/// 建立帶 HTTP 狀態碼的空 Dialog 回應
+pub fn dialog_empty_with_status() -> warp::reply::WithStatus<warp::reply::Json> {
+    warp::reply::with_status(dialog_empty_response(), warp::http::StatusCode::OK)
+}
+
+/// 建立帶欄位錯誤的 DialogSubmissionResponse
+pub fn dialog_field_error(
+    field_name: impl Into<String>,
+    error_message: impl Into<String>,
+) -> warp::reply::WithStatus<warp::reply::Json> {
+    use crate::handlers::group_buy::DialogSubmissionResponse;
+    let mut errors = std::collections::HashMap::new();
+    errors.insert(field_name.into(), error_message.into());
+    warp::reply::with_status(
+        warp::reply::json(&DialogSubmissionResponse {
+            error: None,
+            text: None,
+            errors: Some(errors),
+        }),
+        warp::http::StatusCode::OK,
+    )
+}
+
 /// 從表單中安全地提取欄位值，找不到時返回空字串
 pub fn get_form_field(form: &HashMap<String, String>, key: &str) -> String {
     form.get(key).cloned().unwrap_or_default()

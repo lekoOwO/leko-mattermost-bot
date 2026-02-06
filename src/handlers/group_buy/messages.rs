@@ -161,3 +161,253 @@ pub fn generate_group_buy_message_with_orders(
 
     msg
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_generate_group_buy_message_basic() {
+        let items = HashMap::new();
+        let metadata = HashMap::new();
+        let status = GroupBuyStatus::Active;
+
+        let msg = generate_group_buy_message(
+            "測試店家",
+            &None,
+            &metadata,
+            &status,
+            &items,
+        );
+
+        assert!(msg.contains("🛒 **【團購】測試店家**"));
+        assert!(msg.contains("━━━━━━━━━━━━━━━━━━━━"));
+        assert!(!msg.contains("🔒"));
+    }
+
+    #[test]
+    fn test_generate_group_buy_message_closed() {
+        let items = HashMap::new();
+        let metadata = HashMap::new();
+        let status = GroupBuyStatus::Closed;
+
+        let msg = generate_group_buy_message(
+            "測試店家",
+            &None,
+            &metadata,
+            &status,
+            &items,
+        );
+
+        assert!(msg.contains("🔒 **【已截止】**"));
+    }
+
+    #[test]
+    fn test_generate_group_buy_message_with_description() {
+        let items = HashMap::new();
+        let metadata = HashMap::new();
+        let status = GroupBuyStatus::Active;
+        let description = Some("這是一個測試描述".to_string());
+
+        let msg = generate_group_buy_message(
+            "測試店家",
+            &description,
+            &metadata,
+            &status,
+            &items,
+        );
+
+        assert!(msg.contains("📝 **描述:**"));
+        assert!(msg.contains("這是一個測試描述"));
+    }
+
+    #[test]
+    fn test_generate_group_buy_message_with_metadata() {
+        let items = HashMap::new();
+        let mut metadata = HashMap::new();
+        metadata.insert("截止時間".to_string(), "2026-02-10".to_string());
+        metadata.insert("取貨地點".to_string(), "辦公室".to_string());
+        let status = GroupBuyStatus::Active;
+
+        let msg = generate_group_buy_message(
+            "測試店家",
+            &None,
+            &metadata,
+            &status,
+            &items,
+        );
+
+        assert!(msg.contains("ℹ️ **其他資訊:**"));
+        assert!(msg.contains("截止時間"));
+        assert!(msg.contains("2026-02-10"));
+        assert!(msg.contains("取貨地點"));
+        assert!(msg.contains("辦公室"));
+    }
+
+    #[test]
+    fn test_generate_group_buy_message_with_items() {
+        let mut items = HashMap::new();
+        items.insert("炸雞".to_string(), Decimal::new(100, 0));
+        items.insert("薯條".to_string(), Decimal::new(50, 0));
+        let metadata = HashMap::new();
+        let status = GroupBuyStatus::Active;
+
+        let msg = generate_group_buy_message(
+            "測試店家",
+            &None,
+            &metadata,
+            &status,
+            &items,
+        );
+
+        assert!(msg.contains("🍱 **商品列表:**"));
+        assert!(msg.contains("炸雞 - NT$100"));
+        assert!(msg.contains("薯條 - NT$50"));
+    }
+
+    #[test]
+    fn test_generate_group_buy_message_skips_example_item() {
+        let mut items = HashMap::new();
+        items.insert(EXAMPLE_ITEM_NAME.to_string(), Decimal::new(0, 0));
+        let metadata = HashMap::new();
+        let status = GroupBuyStatus::Active;
+
+        let msg = generate_group_buy_message(
+            "測試店家",
+            &None,
+            &metadata,
+            &status,
+            &items,
+        );
+
+        // 不應該顯示範例商品
+        assert!(!msg.contains("🍱 **商品列表:**"));
+    }
+
+    #[test]
+    fn test_generate_action_buttons_active() {
+        let buttons = generate_action_buttons(
+            "test-id-123",
+            &GroupBuyStatus::Active,
+            "http://localhost:3000",
+        );
+
+        assert_eq!(buttons.len(), 1);
+        let actions = buttons[0]["actions"].as_array().unwrap();
+        
+        // Active 狀態應該有 7 個按鈕
+        assert_eq!(actions.len(), 7);
+        
+        // 檢查按鈕名稱
+        let names: Vec<&str> = actions
+            .iter()
+            .map(|a| a["name"].as_str().unwrap())
+            .collect();
+        
+        assert!(names.contains(&"編輯商品"));
+        assert!(names.contains(&"登記"));
+        assert!(names.contains(&"取消登記"));
+        assert!(names.contains(&"截止"));
+        assert!(names.contains(&"採購列表"));
+        assert!(names.contains(&"小計"));
+    }
+
+    #[test]
+    fn test_generate_action_buttons_closed() {
+        let buttons = generate_action_buttons(
+            "test-id-456",
+            &GroupBuyStatus::Closed,
+            "http://localhost:3000",
+        );
+
+        assert_eq!(buttons.len(), 1);
+        let actions = buttons[0]["actions"].as_array().unwrap();
+        
+        // Closed 狀態應該有 4 個按鈕
+        assert_eq!(actions.len(), 4);
+        
+        let names: Vec<&str> = actions
+            .iter()
+            .map(|a| a["name"].as_str().unwrap())
+            .collect();
+        
+        assert!(names.contains(&"重新開放"));
+        assert!(names.contains(&"調整缺貨"));
+        assert!(names.contains(&"採購列表"));
+        assert!(names.contains(&"小計"));
+    }
+
+    #[test]
+    fn test_generate_group_buy_message_with_orders() {
+        use chrono::Utc;
+        
+        let mut items = HashMap::new();
+        items.insert("炸雞".to_string(), Decimal::new(100, 0));
+        
+        let metadata = HashMap::new();
+        let status = GroupBuyStatus::Active;
+        
+        let orders = vec![
+            GroupBuyOrder {
+                id: "1".to_string(),
+                group_buy_id: "test-id".to_string(),
+                item_name: "炸雞".to_string(),
+                buyer_id: "user1".to_string(),
+                buyer_username: "User1".to_string(),
+                registrar_id: "user1".to_string(),
+                registrar_username: "User1".to_string(),
+                quantity: 2,
+                original_quantity: None,
+                unit_price: Decimal::new(100, 0),
+                created_at: Utc::now(),
+            },
+            GroupBuyOrder {
+                id: "2".to_string(),
+                group_buy_id: "test-id".to_string(),
+                item_name: "炸雞".to_string(),
+                buyer_id: "user2".to_string(),
+                buyer_username: "User2".to_string(),
+                registrar_id: "user3".to_string(),
+                registrar_username: "User3".to_string(),
+                quantity: 1,
+                original_quantity: None,
+                unit_price: Decimal::new(100, 0),
+                created_at: Utc::now(),
+            },
+        ];
+
+        let msg = generate_group_buy_message_with_orders(
+            "測試店家",
+            &None,
+            &metadata,
+            &status,
+            &items,
+            &orders,
+        );
+
+        assert!(msg.contains("📋 **登記名單:**"));
+        assert!(msg.contains("**炸雞** (共 3 份)"));
+        assert!(msg.contains("@User1 x2"));
+        assert!(msg.contains("@User2 x1 (由 @User3 登記)"));
+    }
+
+    #[test]
+    fn test_generate_group_buy_message_with_empty_orders() {
+        let items = HashMap::new();
+        let metadata = HashMap::new();
+        let status = GroupBuyStatus::Active;
+        let orders = vec![];
+
+        let msg = generate_group_buy_message_with_orders(
+            "測試店家",
+            &None,
+            &metadata,
+            &status,
+            &items,
+            &orders,
+        );
+
+        // 沒有訂單時不應顯示登記名單
+        assert!(!msg.contains("📋 **登記名單:**"));
+    }
+}

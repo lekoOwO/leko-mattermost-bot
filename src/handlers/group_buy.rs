@@ -124,7 +124,7 @@ pub async fn handle_group_buy_command(
         bot_callback_url: &bot_callback_url,
     };
 
-    match dialogs::open_create_dialog(&state_guard.mattermost_client, &create_params).await {
+    match dialogs::open_create_dialog(state_guard.mattermost_client.as_ref(), &create_params).await {
         Ok(_) => {
             info!("用戶 {} 開啟建立團購 dialog", req.user_name);
             // 不返回任何訊息，讓 dialog 提交後的 response_url 可以發送新訊息

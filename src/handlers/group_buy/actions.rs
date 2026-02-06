@@ -125,7 +125,7 @@ async fn handle_edit_items_action(
     };
 
     if let Err(e) =
-        super::dialogs::open_edit_items_dialog(&state_guard.mattermost_client, &edit_params).await
+        super::dialogs::open_edit_items_dialog(state_guard.mattermost_client.as_ref(), &edit_params).await
     {
         error!("打開編輯商品 Dialog 失敗: {}", e);
         return Ok(ephemeral_text_json("打開編輯視窗失敗"));
@@ -215,7 +215,7 @@ async fn handle_register_action(
     };
 
     if let Err(e) =
-        super::dialogs::open_register_dialog(&state_guard.mattermost_client, &register_params).await
+        super::dialogs::open_register_dialog(state_guard.mattermost_client.as_ref(), &register_params).await
     {
         error!("打開登記 Dialog 失敗: {}", e);
         return Ok(ephemeral_text_json("打開登記視窗失敗"));
@@ -298,7 +298,7 @@ async fn handle_cancel_register_action(
     };
 
     if let Err(e) =
-        super::dialogs::open_cancel_register_dialog(&state_guard.mattermost_client, &cancel_params)
+        super::dialogs::open_cancel_register_dialog(state_guard.mattermost_client.as_ref(), &cancel_params)
             .await
     {
         error!("打開取消登記 Dialog 失敗: {}", e);
@@ -576,7 +576,7 @@ async fn handle_adjust_shortage_action(
     };
 
     if let Err(e) =
-        super::dialogs::open_adjust_shortage_dialog(&state_guard.mattermost_client, &adjust_params)
+        super::dialogs::open_adjust_shortage_dialog(state_guard.mattermost_client.as_ref(), &adjust_params)
             .await
     {
         error!("打開調整缺貨 Dialog 失敗: {}", e);

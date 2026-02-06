@@ -2,6 +2,7 @@ use super::*;
 use crate::handlers::reply_helpers::{dialog_error_with_status, dialog_empty_with_status, dialog_field_error};
 use crate::constants::group_buy::EXAMPLE_ITEM_NAME;
 use crate::validation::GroupBuyValidator;
+use crate::mattermost::MattermostService;
 use chrono::Utc;
 use std::collections::HashMap;
 
@@ -17,7 +18,7 @@ pub struct CreateDialogParams<'a> {
 
 // Open create dialog
 pub async fn open_create_dialog(
-    client: &MattermostClient,
+    client: &dyn MattermostService,
     params: &CreateDialogParams<'_>,
 ) -> Result<()> {
     let elements = vec![
@@ -292,7 +293,7 @@ pub fn parse_items_yaml(yaml: &str) -> Result<HashMap<String, Decimal>> {
 
 // Open edit items dialog
 pub async fn open_edit_items_dialog(
-    client: &MattermostClient,
+    client: &dyn MattermostService,
     params: &EditItemsDialogParams<'_>,
 ) -> Result<()> {
     let elements = vec![DialogElement {
@@ -499,7 +500,7 @@ pub async fn handle_edit_items_dialog(
 // Cancel register: open + handle
 #[allow(clippy::too_many_arguments)]
 pub async fn open_cancel_register_dialog(
-    client: &MattermostClient,
+    client: &dyn MattermostService,
     params: &CancelRegisterDialogParams,
 ) -> Result<()> {
     let elements = vec![DialogElement {
@@ -632,7 +633,7 @@ pub async fn handle_cancel_register_dialog(
 // Open register dialog
 #[allow(clippy::too_many_arguments)]
 pub async fn open_register_dialog(
-    client: &MattermostClient,
+    client: &dyn MattermostService,
     params: &RegisterDialogParams<'_>,
 ) -> Result<()> {
     let item_options: Vec<DialogOption> = params
@@ -882,7 +883,7 @@ pub async fn handle_register_dialog(
 
 // Open adjust shortage dialog
 pub async fn open_adjust_shortage_dialog(
-    client: &MattermostClient,
+    client: &dyn MattermostService,
     params: &AdjustShortageDialogParams<'_>,
 ) -> Result<()> {
     let mut yaml = String::new();

@@ -12,6 +12,7 @@ mod websocket;
 
 use anyhow::{Context, Result};
 use clap::Parser;
+use mattermost::MattermostService;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -53,7 +54,7 @@ struct Args {
 
 pub struct AppState {
     pub config: Config,
-    pub mattermost_client: MattermostClient,
+    pub mattermost_client: Arc<dyn MattermostService>,
     pub sticker_database: StickerDatabase,
     pub database: Database,
     pub bot_user_id: String,
@@ -144,7 +145,7 @@ async fn main() -> Result<()> {
     // 建立應用狀態
     let state = Arc::new(RwLock::new(AppState {
         config,
-        mattermost_client,
+        mattermost_client: Arc::new(mattermost_client),
         sticker_database,
         database,
         bot_user_id,

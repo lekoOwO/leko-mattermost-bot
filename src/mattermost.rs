@@ -36,7 +36,7 @@ pub struct MattermostClient {
     client: Client,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Post {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
@@ -156,7 +156,7 @@ pub struct WebhookPost {
 }
 
 /// User 資訊
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct User {
     pub id: String,
     pub username: String,
@@ -169,7 +169,7 @@ pub struct User {
 }
 
 /// Channel 資訊
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Channel {
     pub id: String,
     #[serde(rename = "type")]

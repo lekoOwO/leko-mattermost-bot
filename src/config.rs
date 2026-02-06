@@ -25,6 +25,8 @@ pub struct MattermostConfig {
     pub slash_command_tokens: SlashCommandTokens,
     #[serde(default)]
     pub bot_callback_url: Option<String>, // Bot 服務器的公開 URL，用於 dialog callback
+    #[serde(default)]
+    pub default_avatar: Option<String>, // 默認頭像，可以是 URL 或 @username 格式
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -103,6 +105,31 @@ impl Config {
                 admin == user_id
             }
         })
+    }
+
+    /// 解析默認頭像 URL
+    /// 支援普通 URL 或 @username 格式
+    /// @username 會被轉換為 Mattermost 用戶頭像 API URL
+    pub fn get_default_avatar_url(&self) -> Option<String> {
+        self.mattermost.default_avatar.as_ref().map(|avatar| {
+            if let Some(username) = avatar.strip_prefix('@') {
+                // @username 格式，需要先查詢用戶 ID（這裡返回 username，實際使用時需要額外處理）
+                format!("@{}", username)
+            } else {
+                // 普通 URL
+                avatar.clone()
+            }
+        })
+    }
+
+    /// 獲取頭像 URL，支援 @username 格式
+    /// 如果是 @username 格式，會轉換為 Mattermost API URL
+    pub fn resolve_avatar_url(&self, avatar: &str) -> String {
+        if let Some(username) = avatar.strip_prefix('@') {
+            format!("{}/api/v4/users/username/{}/image", self.mattermost.url, username)
+        } else {
+            avatar.to_string()
+        }
     }
 }
 

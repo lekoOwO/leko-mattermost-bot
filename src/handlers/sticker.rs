@@ -45,13 +45,17 @@ pub async fn handle_sticker_command_impl(
         .as_ref()
         .map(|url| format!("{}/action", url.trim_end_matches('/')))
         .unwrap_or_else(|| "http://localhost/action".to_string());
+    let default_avatar_url = app_state
+        .config
+        .get_default_avatar_url()
+        .map(|avatar| app_state.config.resolve_avatar_url(&avatar));
     drop(app_state);
 
     let stickers = match sticker_db.search_async(&text, None).await {
         Ok(v) => v.into_iter().take(25).collect::<Vec<_>>(),
         Err(e) => {
             error!("搜尋貼圖失敗: {}", e);
-            return Ok(ephemeral_json_reply("搜尋貼圖失敗，請稍後再試"));
+            return Ok(ephemeral_json_reply("搜尋貼圖失敗，請稍後再試", default_avatar_url));
         }
     };
 
@@ -61,7 +65,7 @@ pub async fn handle_sticker_command_impl(
         } else {
             format!("找不到符合「{}」的貼圖", text)
         };
-        return Ok(ephemeral_json_reply(message));
+        return Ok(ephemeral_json_reply(message, default_avatar_url));
     }
 
     let sticker_options: Vec<ActionOption> = stickers
@@ -142,7 +146,7 @@ pub async fn handle_sticker_command_impl(
             .await
         {
             error!("透過 response_url 發送失敗: {}", e);
-            return Ok(ephemeral_json_reply("發送貼圖選擇器失敗，請稍後再試"));
+            return Ok(ephemeral_json_reply("發送貼圖選擇器失敗，請稍後再試", default_avatar_url));
         }
         info!(
             "已建立 Interactive Message，共 {} 個貼圖選項",
@@ -152,6 +156,6 @@ pub async fn handle_sticker_command_impl(
         Ok(empty_json_reply())
     } else {
         error!("response_url 為空");
-        Ok(ephemeral_json_reply("無法發送貼圖選擇器"))
+        Ok(ephemeral_json_reply("無法發送貼圖選擇器", default_avatar_url))
     }
 }

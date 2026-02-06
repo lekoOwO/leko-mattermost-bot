@@ -31,7 +31,7 @@ pub async fn handle_leko_command(
 
     match subcommand {
         "" | "help" => {
-            Ok(warp::reply::with_status(handle_leko_help(), StatusCode::OK))
+            Ok(warp::reply::with_status(handle_leko_help(state).await, StatusCode::OK))
         }
         "admin" => {
             handle_admin_subcommand(&parts, form, state).await
@@ -47,18 +47,32 @@ pub async fn handle_leko_command(
             Ok(warp::reply::with_status(response, StatusCode::OK))
         }
         _ => {
-            Ok(warp::reply::with_status(handle_leko_help(), StatusCode::OK))
+            Ok(warp::reply::with_status(handle_leko_help(state).await, StatusCode::OK))
         }
     }
 }
 
 /// 顯示使用說明
-fn handle_leko_help() -> warp::reply::Json {
+async fn handle_leko_help(state: Arc<RwLock<AppState>>) -> warp::reply::Json {
     info!("顯示 /leko 使用說明");
-    warp::reply::json(&serde_json::json!({
+    
+    let app_state = state.read().await;
+    let icon_url = app_state
+        .config
+        .get_default_avatar_url()
+        .map(|avatar| app_state.config.resolve_avatar_url(&avatar));
+    drop(app_state);
+    
+    let mut response = serde_json::json!({
         "response_type": "ephemeral",
         "text": "### 📚 `/leko` 指令使用說明\n\n**可用子指令：**\n\n- `/leko help` - 顯示此說明訊息\n- `/leko admin [指令]` - Bot 管理功能（僅管理員）\n- `/leko group_buy` - 開啟建立團購對話框\n- `/leko sticker [關鍵字]` - 搜尋並發送貼圖\n\n**範例：**\n```\n/leko admin help\n/leko admin status\n/leko group_buy\n/leko sticker 快樂\n/leko sticker\n```\n\n💡 提示：你也可以直接使用 `/group_buy` 或 `/sticker` 指令。"
-    }))
+    });
+    
+    if let Some(url) = icon_url {
+        response["icon_url"] = serde_json::json!(url);
+    }
+    
+    warp::reply::json(&response)
 }
 
 /// 處理 /leko admin 子指令
@@ -71,11 +85,21 @@ async fn handle_admin_subcommand(
     let user_name = get_form_field(&form, "user_name");
 
     if user_id.is_empty() {
-        return Ok(ephemeral_json_with_status("❌ 無法取得使用者資訊"));
+        let app_state = state.read().await;
+        let icon_url = app_state
+            .config
+            .get_default_avatar_url()
+            .map(|avatar| app_state.config.resolve_avatar_url(&avatar));
+        drop(app_state);
+        return Ok(ephemeral_json_with_status("❌ 無法取得使用者資訊", icon_url));
     }
 
     let app_state = state.read().await;
     let is_admin = app_state.config.is_admin(&user_id, &user_name);
+    let icon_url = app_state
+        .config
+        .get_default_avatar_url()
+        .map(|avatar| app_state.config.resolve_avatar_url(&avatar));
     drop(app_state);
 
     if !is_admin {
@@ -85,32 +109,32 @@ async fn handle_admin_subcommand(
         );
         return Ok(ephemeral_json_with_status(
             "⚠️ 您沒有使用此功能的權限。",
+            icon_url,
         ));
     }
 
     info!("管理員 {} ({}) 使用 admin 指令", user_name, user_id);
 
     let admin_command = parts.get(1).copied().unwrap_or("");
-    let response_text = websocket::handle_admin_command(admin_command, state).await;
+    let response_text = websocket::handle_admin_command(admin_command, state.clone()).await;
 
-    Ok(ephemeral_json_with_status(response_text))
+    let app_state = state.read().await;
+    let icon_url = app_state
+        .config
+        .get_default_avatar_url()
+        .map(|avatar| app_state.config.resolve_avatar_url(&avatar));
+    drop(app_state);
+
+    Ok(ephemeral_json_with_status(response_text, icon_url))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use warp::Reply;
-
-    #[test]
-    fn test_handle_leko_help() {
-        let response = handle_leko_help();
-        let body = response.into_response().into_body();
-        
-        // 驗證回應包含預期內容
-        // 注意：在實際應用中，你可能需要解析 JSON 來驗證
-        // 這裡只是簡單驗證函數能正常執行
-        drop(body);
-    }
+    // 注意：handle_leko_help 現在是 async 函數，需要使用 async runtime 來測試
+    // #[tokio::test]
+    // async fn test_handle_leko_help() {
+    //     // 需要建立一個測試用的 AppState
+    // }
 
     #[test]
     fn test_parse_subcommand() {

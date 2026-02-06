@@ -4,18 +4,33 @@ use std::collections::HashMap;
 use warp::http::StatusCode;
 
 /// 建立 ephemeral 類型的 JSON 回應（僅使用者可見）
-pub fn ephemeral_json_reply(text: impl Into<String>) -> warp::reply::Json {
-    warp::reply::json(&serde_json::json!({
+/// 
+/// # 參數
+/// - `text`: 回應訊息內容
+/// - `icon_url`: 可選的頭像 URL
+pub fn ephemeral_json_reply(text: impl Into<String>, icon_url: Option<String>) -> warp::reply::Json {
+    let mut response = serde_json::json!({
         "response_type": "ephemeral",
         "text": text.into()
-    }))
+    });
+    
+    if let Some(url) = icon_url {
+        response["icon_url"] = serde_json::json!(url);
+    }
+    
+    warp::reply::json(&response)
 }
 
 /// 建立 ephemeral 類型的 JSON 回應，帶 HTTP 狀態碼
+/// 
+/// # 參數
+/// - `text`: 回應訊息內容
+/// - `icon_url`: 可選的頭像 URL
 pub fn ephemeral_json_with_status(
     text: impl Into<String>,
+    icon_url: Option<String>,
 ) -> warp::reply::WithStatus<warp::reply::Json> {
-    warp::reply::with_status(ephemeral_json_reply(text), StatusCode::OK)
+    warp::reply::with_status(ephemeral_json_reply(text, icon_url), StatusCode::OK)
 }
 
 /// 建立 in_channel 類型的 JSON 回應（所有人可見）

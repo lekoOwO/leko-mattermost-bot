@@ -34,6 +34,8 @@ mattermost:
   bot_token: your-bot-token-here
   slash_command_token: your-slash-command-token  # 可選，建議啟用
   bot_callback_url: http://your-bot-server:3000  # Bot 服務位址
+  default_avatar: https://example.com/avatar.png # 可選，預設頭像
+  # default_avatar: "@botusername"               # 或使用 @username 格式
 
 stickers:
   categories:
@@ -71,6 +73,19 @@ admin:                          # 管理員列表（可選）
 - `format`: 資料格式，`csv` 或 `json`
 - `url`: 遠端 URL（必填）
 - `headers`: 自定義 HTTP headers（可選）
+
+#### 預設頭像配置說明
+
+`default_avatar` 是可選的配置項，用於設定在沒有指定特定用戶頭像的訊息中顯示的預設頭像。支援兩種格式：
+
+- **一般 URL**：`https://example.com/avatar.png`
+- **用戶名格式**：`@username` - 會自動轉換為該 Mattermost 用戶的頭像
+
+此設定適用於以下情況：
+- `/leko help` 顯示說明訊息時
+- `/leko admin` 管理指令回應時
+- `/sticker` 指令錯誤訊息時
+- 其他沒有特定用戶身份的 ephemeral 訊息
 
 ### 在 Mattermost 設定
 

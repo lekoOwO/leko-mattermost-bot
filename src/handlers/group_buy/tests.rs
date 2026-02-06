@@ -5,7 +5,6 @@
 mod integration_tests {
     use crate::config::{Config, MattermostConfig, StickersConfig, SlashCommandTokens};
     use crate::database::Database;
-    use crate::mattermost::DialogElement;
     use crate::sticker::StickerDatabase;
     use crate::test_utils::utils::MockMattermostService;
     use crate::AppState;
@@ -25,6 +24,7 @@ mod integration_tests {
                 bot_token: "test_token".to_string(),
                 bot_callback_url: Some("http://localhost:3000".to_string()),
                 slash_command_tokens: SlashCommandTokens::default(),
+                default_avatar: None,
             },
             stickers: StickersConfig {
                 categories: vec![],

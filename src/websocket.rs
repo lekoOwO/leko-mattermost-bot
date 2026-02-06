@@ -1,5 +1,6 @@
 //! Mattermost WebSocket 客戶端
 
+use crate::constants::websocket::{RECONNECT_DELAY, AUTH_SEQUENCE, AUTH_ACTION};
 use anyhow::{Context, Result};
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -103,9 +104,9 @@ pub async fn start_websocket(state: Arc<RwLock<AppState>>) -> Result<()> {
             }
         }
 
-        // 等待 5 秒後重新連接
-        info!("5 秒後重新連接 WebSocket...");
-        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        // 等待指定時間後重新連接
+        info!("{} 秒後重新連接 WebSocket...", RECONNECT_DELAY.as_secs());
+        tokio::time::sleep(RECONNECT_DELAY).await;
     }
 }
 
@@ -122,8 +123,8 @@ async fn connect_and_handle(
 
     // 發送認證請求
     let auth = AuthChallenge {
-        seq: 1,
-        action: "authentication_challenge".to_string(),
+        seq: AUTH_SEQUENCE,
+        action: AUTH_ACTION.to_string(),
         data: AuthData {
             token: bot_token.to_string(),
         },

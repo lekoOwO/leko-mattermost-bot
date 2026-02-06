@@ -1,4 +1,5 @@
 use super::*;
+use crate::constants::http::DEFAULT_CALLBACK_URL;
 use anyhow::Result;
 use std::collections::HashMap;
 
@@ -50,7 +51,7 @@ pub fn bot_callback_url_from_state(state_guard: &AppState) -> String {
         .bot_callback_url
         .as_ref()
         .map(|url| url.trim_end_matches('/').to_string())
-        .unwrap_or_else(|| "http://localhost:3000".to_string())
+        .unwrap_or_else(|| DEFAULT_CALLBACK_URL.to_string())
 }
 
 /// 取得 group buy，如果不存在或 DB 發生錯誤，回傳 Err(String) 代表要回覆給使用者的 ephemeral 訊息

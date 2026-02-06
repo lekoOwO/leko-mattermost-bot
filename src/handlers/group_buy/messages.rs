@@ -1,4 +1,5 @@
 use crate::database::{GroupBuyOrder, GroupBuyStatus};
+use crate::constants::group_buy::EXAMPLE_ITEM_NAME;
 use rust_decimal::Decimal;
 use serde_json::json;
 use std::collections::HashMap;
@@ -37,7 +38,7 @@ pub fn generate_group_buy_message(
     }
 
     // 商品列表（如果有且不只是範例）
-    if !(items.is_empty() || (items.len() == 1 && items.contains_key("範例商品"))) {
+    if !(items.is_empty() || (items.len() == 1 && items.contains_key(EXAMPLE_ITEM_NAME))) {
         msg.push_str("🍱 **商品列表:**\n");
         for (item, price) in items {
             // 格式化價格，移除不必要的尾部零
@@ -51,132 +52,65 @@ pub fn generate_group_buy_message(
     msg
 }
 
+/// 建構器模式，用於生成團購操作按鈕
+struct ActionButtonBuilder {
+    group_buy_id: String,
+    clean_id: String,
+    bot_callback_url: String,
+}
+
+impl ActionButtonBuilder {
+    fn new(group_buy_id: &str, bot_callback_url: &str) -> Self {
+        Self {
+            group_buy_id: group_buy_id.to_string(),
+            clean_id: group_buy_id.replace("-", ""),
+            bot_callback_url: bot_callback_url.trim_end_matches('/').to_string(),
+        }
+    }
+    
+    /// 建立一個操作按鈕
+    fn build(&self, action: &str, name: &str) -> serde_json::Value {
+        json!({
+            "id": format!("{}{}", action.replace("_", ""), self.clean_id),
+            "name": name,
+            "type": "button",
+            "integration": {
+                "url": format!("{}/api/v1/group_buy/action/{}", self.bot_callback_url, action),
+                "context": {
+                    "action": action,
+                    "group_buy_id": &self.group_buy_id,
+                }
+            }
+        })
+    }
+}
+
 /// 生成操作按鈕
 pub fn generate_action_buttons(
     group_buy_id: &str,
     status: &GroupBuyStatus,
     bot_callback_url: &str,
 ) -> Vec<serde_json::Value> {
+    let builder = ActionButtonBuilder::new(group_buy_id, bot_callback_url);
     let mut actions = Vec::new();
-
-    // 移除 group_buy_id 中的 hyphen，使其成為有效的 action id
-    let clean_id = group_buy_id.replace("-", "");
 
     match status {
         GroupBuyStatus::Active => {
-            // 編輯商品
-            actions.push(json!({
-                "id": format!("edititems{}", clean_id),
-                "name": "編輯商品",
-                "type": "button",
-                "integration": {
-                    "url": format!("{}/api/v1/group_buy/action/edit_items", bot_callback_url.trim_end_matches('/')),
-                    "context": {
-                        "action": "edit_items",
-                        "group_buy_id": group_buy_id,
-                    }
-                }
-            }));
-
-            // 登記
-            actions.push(json!({
-                "id": format!("register{}", clean_id),
-                "name": "登記",
-                "type": "button",
-                "integration": {
-                    "url": format!("{}/api/v1/group_buy/action/register", bot_callback_url.trim_end_matches('/')),
-                    "context": {
-                        "action": "register",
-                        "group_buy_id": group_buy_id,
-                    }
-                }
-            }));
-
-            // 取消登記（清除某一被登記人的所有登記）
-            actions.push(json!({
-                "id": format!("cancelregister{}", clean_id),
-                "name": "取消登記",
-                "type": "button",
-                "integration": {
-                    "url": format!("{}/api/v1/group_buy/action/cancel_register", bot_callback_url.trim_end_matches('/')),
-                    "context": {
-                        "action": "cancel_register",
-                        "group_buy_id": group_buy_id,
-                    }
-                }
-            }));
-
-            // 截止
-            actions.push(json!({
-                "id": format!("close{}", clean_id),
-                "name": "截止",
-                "type": "button",
-                "integration": {
-                    "url": format!("{}/api/v1/group_buy/action/close", bot_callback_url.trim_end_matches('/')),
-                    "context": {
-                        "action": "close",
-                        "group_buy_id": group_buy_id,
-                    }
-                }
-            }));
+            actions.push(builder.build("edit_items", "編輯商品"));
+            actions.push(builder.build("register", "登記"));
+            actions.push(builder.build("cancel_register", "取消登記"));
+            actions.push(builder.build("close", "截止"));
+            actions.push(builder.build("close", "截止"));
         }
         GroupBuyStatus::Closed => {
-            // 重新開放
-            actions.push(json!({
-                "id": format!("reopen{}", clean_id),
-                "name": "重新開放",
-                "type": "button",
-                "integration": {
-                    "url": format!("{}/api/v1/group_buy/action/reopen", bot_callback_url.trim_end_matches('/')),
-                    "context": {
-                        "action": "reopen",
-                        "group_buy_id": group_buy_id,
-                    }
-                }
-            }));
-
-            // 調整缺貨
-            actions.push(json!({
-                "id": format!("adjustshortage{}", clean_id),
-                "name": "調整缺貨",
-                "type": "button",
-                "integration": {
-                    "url": format!("{}/api/v1/group_buy/action/adjust_shortage", bot_callback_url.trim_end_matches('/')),
-                    "context": {
-                        "action": "adjust_shortage",
-                        "group_buy_id": group_buy_id,
-                    }
-                }
-            }));
+            actions.push(builder.build("reopen", "重新開放"));
+            actions.push(builder.build("adjust_shortage", "調整缺貨"));
         }
     }
 
     // 這些按鈕在任何狀態都顯示
-    actions.push(json!({
-        "id": format!("shoppinglist{}", clean_id),
-        "name": "採購列表",
-        "type": "button",
-        "integration": {
-            "url": format!("{}/api/v1/group_buy/action/shopping_list", bot_callback_url.trim_end_matches('/')),
-            "context": {
-                "action": "shopping_list",
-                "group_buy_id": group_buy_id,
-            }
-        }
-    }));
-
-    actions.push(json!({
-        "id": format!("subtotal{}", clean_id),
-        "name": "小計",
-        "type": "button",
-        "integration": {
-            "url": format!("{}/api/v1/group_buy/action/subtotal", bot_callback_url.trim_end_matches('/')),
-            "context": {
-                "action": "subtotal",
-                "group_buy_id": group_buy_id,
-            }
-        }
-    }));
+    actions.push(builder.build("shopping_list", "採購列表"));
+    actions.push(builder.build("subtotal", "小計"));
 
     vec![json!({
         "actions": actions

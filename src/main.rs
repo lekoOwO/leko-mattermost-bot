@@ -1,10 +1,13 @@
 mod config;
+mod constants;
 mod database;
+mod env;
 mod handlers;
 mod mattermost;
 mod sticker;
 #[cfg(test)]
 mod test_utils;
+mod validation;
 mod websocket;
 
 use anyhow::{Context, Result};
@@ -29,6 +32,8 @@ use mattermost::MattermostClient;
 use sticker::StickerDatabase;
 use websocket::start_websocket;
 
+use constants::http::{DEFAULT_HOST, DEFAULT_PORT};
+
 #[derive(Parser, Debug)]
 #[command(name = "leko-mattermost-bot")]
 #[command(about = "Leko's Mattermost Bot - 通用貼圖機器人", long_about = None)]
@@ -38,11 +43,11 @@ struct Args {
     config: Option<PathBuf>,
 
     /// HTTP 伺服器監聽位址
-    #[arg(short = 'H', long, default_value = "0.0.0.0")]
+    #[arg(short = 'H', long, default_value_t = DEFAULT_HOST.to_string())]
     host: String,
 
     /// HTTP 伺服器監聯埠號
-    #[arg(short, long, default_value = "3000")]
+    #[arg(short, long, default_value_t = DEFAULT_PORT)]
     port: u16,
 }
 
@@ -57,11 +62,14 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // 載入環境變數配置
+    let env_config = env::EnvConfig::load();
+    
     // 初始化日誌
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(&env_config.log_level)),
         )
         .init();
 
@@ -75,11 +83,8 @@ async fn main() -> Result<()> {
 
     info!("正在啟動 Leko's Mattermost Bot...");
 
-    // 確定配置文件路徑
-    let config_path = args
-        .config
-        .or_else(|| std::env::var("CONFIG_YAML").ok().map(PathBuf::from))
-        .unwrap_or_else(|| PathBuf::from("config.yaml"));
+    // 確定配置文件路徑（優先順序：命令列參數 > 環境變數 > 預設值）
+    let config_path = env_config.get_config_path(args.config);
 
     // 載入配置
     let config = Config::from_path(&config_path).context("載入配置失敗")?;

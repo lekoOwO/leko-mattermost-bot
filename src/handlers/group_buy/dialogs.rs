@@ -1,5 +1,7 @@
 use super::*;
 use crate::handlers::reply_helpers::{dialog_error_with_status, dialog_empty_with_status, dialog_field_error};
+use crate::constants::group_buy::EXAMPLE_ITEM_NAME;
+use crate::validation::GroupBuyValidator;
 use chrono::Utc;
 use std::collections::HashMap;
 
@@ -272,8 +274,8 @@ pub async fn handle_create_dialog(
 
 // helpers: items_to_yaml & parse_items_yaml
 pub fn items_to_yaml(items: &HashMap<String, Decimal>) -> String {
-    if items.len() == 1 && items.contains_key("範例商品") {
-        return "# 範例商品: 10\n".to_string();
+    if items.len() == 1 && items.contains_key(EXAMPLE_ITEM_NAME) {
+        return format!("# {}: 10\n", EXAMPLE_ITEM_NAME);
     }
 
     let mut yaml = String::new();
@@ -284,37 +286,8 @@ pub fn items_to_yaml(items: &HashMap<String, Decimal>) -> String {
 }
 
 pub fn parse_items_yaml(yaml: &str) -> Result<HashMap<String, Decimal>> {
-    let mut items = HashMap::new();
-
-    for line in yaml.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-
-        let parts: Vec<&str> = line.splitn(2, ':').collect();
-        if parts.len() != 2 {
-            anyhow::bail!("格式錯誤：{}", line);
-        }
-
-        let name = parts[0].trim();
-        let price_str = parts[1].trim();
-
-        if name.is_empty() {
-            anyhow::bail!("商品名稱不能為空");
-        }
-
-        let price = Decimal::from_str(price_str)
-            .map_err(|_| anyhow::anyhow!("價格格式錯誤：{}", price_str))?;
-
-        if price.is_sign_negative() {
-            anyhow::bail!("價格不能為負數");
-        }
-
-        items.insert(name.to_string(), price);
-    }
-
-    Ok(items)
+    GroupBuyValidator::validate_items_yaml(yaml)
+        .map_err(|e| anyhow::anyhow!("{}", e))
 }
 
 // Open edit items dialog

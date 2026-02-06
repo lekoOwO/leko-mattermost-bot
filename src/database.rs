@@ -1,4 +1,5 @@
 use crate::sticker::Sticker;
+use crate::constants::database::{MAX_CONNECTIONS, BUSY_TIMEOUT};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
@@ -227,13 +228,13 @@ impl Database {
         let options = SqliteConnectOptions::from_str(database_url)?
             .create_if_missing(true)
             .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal)
-            .busy_timeout(std::time::Duration::from_secs(5))
+            .busy_timeout(BUSY_TIMEOUT)
             .auto_vacuum(sqlx::sqlite::SqliteAutoVacuum::Full)
             .foreign_keys(true);
 
         // 建立連接池
         let pool = SqlitePoolOptions::new()
-            .max_connections(5)
+            .max_connections(MAX_CONNECTIONS)
             .connect_with(options)
             .await
             .with_context(|| format!("無法連接到資料庫: {}", database_url))?;
@@ -254,22 +255,26 @@ impl Database {
         // `DB_SCHEMA_FILE`. Otherwise use the embedded schema that is baked
         // into the binary at compile time (see `EMBEDDED_SCHEMA`). This keeps
         // runtime self-contained.
-        if let Ok(schema_path) = std::env::var("DB_SCHEMA_FILE") {
-            if let Ok(schema) = std::fs::read_to_string(&schema_path) {
-                for stmt in schema.split(';') {
-                    let s = stmt.trim();
-                    if s.is_empty() {
-                        continue;
+        let env_config = crate::env::EnvConfig::load();
+        
+        if env_config.has_external_schema() {
+            if let Some(schema_path) = env_config.get_schema_path() {
+                if let Ok(schema) = std::fs::read_to_string(schema_path) {
+                    for stmt in schema.split(';') {
+                        let s = stmt.trim();
+                        if s.is_empty() {
+                            continue;
+                        }
+                        sqlx::query(s).execute(&self.pool).await?;
                     }
-                    sqlx::query(s).execute(&self.pool).await?;
+                    info!("資料表結構初始化完成 (from {})", schema_path);
+                    return Ok(());
+                } else {
+                    info!(
+                        "DB_SCHEMA_FILE set but not readable: {}. Falling back to embedded schema",
+                        schema_path
+                    );
                 }
-                info!("資料表結構初始化完成 (from {})", schema_path);
-                return Ok(());
-            } else {
-                info!(
-                    "DB_SCHEMA_FILE set but not readable: {}. Falling back to embedded schema",
-                    schema_path
-                );
             }
         }
 

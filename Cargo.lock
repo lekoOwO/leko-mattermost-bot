@@ -1200,6 +1200,7 @@ dependencies = [
  "chrono",
  "clap",
  "csv",
+ "dotenvy",
  "futures-util",
  "mockito",
  "reqwest",

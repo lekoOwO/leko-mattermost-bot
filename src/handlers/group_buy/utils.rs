@@ -69,6 +69,40 @@ pub async fn fetch_group_buy(
     }
 }
 
+/// 檢查使用者是否為團購建立者
+/// 如果不是，回傳 Err(錯誤訊息)
+pub fn check_creator_permission(
+    group_buy: &GroupBuy,
+    user_id: &str,
+    action_name: &str,
+) -> Result<(), String> {
+    if group_buy.creator_id != user_id {
+        Err(format!("⚠️ 只有團購建立者可以{}", action_name))
+    } else {
+        Ok(())
+    }
+}
+
+/// 檢查團購狀態是否為 Active
+/// 如果不是，回傳 Err(錯誤訊息)
+pub fn check_active_status(group_buy: &GroupBuy, action_name: &str) -> Result<(), String> {
+    if group_buy.status != GroupBuyStatus::Active {
+        Err(format!("⚠️ 團購已截止，無法{}", action_name))
+    } else {
+        Ok(())
+    }
+}
+
+/// 檢查團購狀態是否為 Closed
+/// 如果不是，回傳 Err(錯誤訊息)
+pub fn check_closed_status(group_buy: &GroupBuy) -> Result<(), String> {
+    if group_buy.status != GroupBuyStatus::Closed {
+        Err("⚠️ 團購尚未截止，無法重新開放".to_string())
+    } else {
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -112,5 +146,62 @@ mod tests {
 
         let v = extract_state_value(&submission).expect("extract should succeed");
         assert_eq!(v.get("hello").and_then(|x| x.as_str()), Some("world"));
+    }
+
+    #[test]
+    fn test_check_creator_permission_allowed() {
+        let mut gb = crate::test_utils::utils::make_group_buy("gb1".to_string(), 1);
+        gb.creator_id = "user1".to_string();
+        
+        let result = check_creator_permission(&gb, "user1", "編輯");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_check_creator_permission_denied() {
+        let mut gb = crate::test_utils::utils::make_group_buy("gb1".to_string(), 1);
+        gb.creator_id = "user1".to_string();
+        
+        let result = check_creator_permission(&gb, "user2", "編輯");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("只有團購建立者"));
+    }
+
+    #[test]
+    fn test_check_active_status_ok() {
+        let mut gb = crate::test_utils::utils::make_group_buy("gb1".to_string(), 1);
+        gb.status = GroupBuyStatus::Active;
+        
+        let result = check_active_status(&gb, "編輯");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_check_active_status_closed() {
+        let mut gb = crate::test_utils::utils::make_group_buy("gb1".to_string(), 1);
+        gb.status = GroupBuyStatus::Closed;
+        
+        let result = check_active_status(&gb, "編輯");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("已截止"));
+    }
+
+    #[test]
+    fn test_check_closed_status_ok() {
+        let mut gb = crate::test_utils::utils::make_group_buy("gb1".to_string(), 1);
+        gb.status = GroupBuyStatus::Closed;
+        
+        let result = check_closed_status(&gb);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_check_closed_status_still_active() {
+        let mut gb = crate::test_utils::utils::make_group_buy("gb1".to_string(), 1);
+        gb.status = GroupBuyStatus::Active;
+        
+        let result = check_closed_status(&gb);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("尚未截止"));
     }
 }

@@ -91,17 +91,13 @@ async fn handle_edit_items_action(
     };
 
     // 檢查權限：只有建立者可以編輯
-    if group_buy.creator_id != action_req.user_id {
-        return Ok(ephemeral_text_json(
-            "⚠️ 只有團購建立者可以編輯商品",
-        ));
+    if let Err(msg) = super::utils::check_creator_permission(&group_buy, &action_req.user_id, "編輯商品") {
+        return Ok(ephemeral_text_json(&msg));
     }
 
     // 檢查狀態：只有 Active 狀態可以編輯
-    if group_buy.status != GroupBuyStatus::Active {
-        return Ok(ephemeral_text_json(
-            "⚠️ 只有進行中的團購可以編輯商品",
-        ));
+    if let Err(msg) = super::utils::check_active_status(&group_buy, "編輯商品") {
+        return Ok(ephemeral_text_json(&msg));
     }
 
     // 將當前商品轉換為 YAML 格式（helper in dialogs submodule）
@@ -331,13 +327,13 @@ async fn handle_close_action(
     };
 
     // 檢查權限：只有建立者可以截止
-    if group_buy.creator_id != action_req.user_id {
-        return Ok(ephemeral_text_json("⚠️ 只有團購建立者可以截止"));
+    if let Err(msg) = super::utils::check_creator_permission(&group_buy, &action_req.user_id, "截止") {
+        return Ok(ephemeral_text_json(&msg));
     }
 
     // 檢查狀態
-    if group_buy.status != GroupBuyStatus::Active {
-        return Ok(ephemeral_text_json("⚠️ 此團購已截止"));
+    if let Err(msg) = super::utils::check_active_status(&group_buy, "截止") {
+        return Ok(ephemeral_text_json(&msg));
     }
 
     // 取得用戶資訊
@@ -432,13 +428,13 @@ async fn handle_reopen_action(
     };
 
     // 檢查權限：只有建立者可以重新開放
-    if group_buy.creator_id != action_req.user_id {
-        return Ok(ephemeral_text_json("⚠️ 只有團購建立者可以重新開放"));
+    if let Err(msg) = super::utils::check_creator_permission(&group_buy, &action_req.user_id, "重新開放") {
+        return Ok(ephemeral_text_json(&msg));
     }
 
     // 檢查狀態
-    if group_buy.status != GroupBuyStatus::Closed {
-        return Ok(ephemeral_text_json("⚠️ 此團購尚未截止"));
+    if let Err(msg) = super::utils::check_closed_status(&group_buy) {
+        return Ok(ephemeral_text_json(&msg));
     }
 
     // 取得用戶資訊
@@ -533,13 +529,13 @@ async fn handle_adjust_shortage_action(
     };
 
     // 檢查權限：只有建立者可以調整
-    if group_buy.creator_id != action_req.user_id {
-        return Ok(ephemeral_text_json("⚠️ 只有團購建立者可以調整缺貨"));
+    if let Err(msg) = super::utils::check_creator_permission(&group_buy, &action_req.user_id, "調整缺貨") {
+        return Ok(ephemeral_text_json(&msg));
     }
 
     // 檢查狀態：只有 Closed 可以調整
-    if group_buy.status != GroupBuyStatus::Closed {
-        return Ok(ephemeral_text_json("⚠️ 只有已截止的團購可以調整缺貨"));
+    if let Err(msg) = super::utils::check_closed_status(&group_buy) {
+        return Ok(ephemeral_text_json(&msg));
     }
 
     // 取得訂單

@@ -280,62 +280,7 @@ async fn handle_posted_event(data: &serde_json::Value, state: Arc<RwLock<AppStat
     let parts: Vec<&str> = message.split_whitespace().collect();
     let command = parts.first().copied().unwrap_or("");
 
-    let response_message = match command {
-        "" => {
-            // 空訊息，顯示 help
-            drop(app_state);
-            get_help_message()
-        }
-        "help" | "幫助" | "?" => {
-            // 顯示 help
-            drop(app_state);
-            get_help_message()
-        }
-        "ping" => {
-            // 測試連線
-            drop(app_state);
-            "🏓 Pong!".to_string()
-        }
-        "status" | "狀態" => {
-            // 顯示狀態
-            let sticker_db = app_state.sticker_database.clone();
-            let admin_count = app_state.config.admin.len();
-            drop(app_state);
-            let sticker_count = match sticker_db.count().await {
-                Ok(c) => c,
-                Err(e) => {
-                    warn!("無法取得貼圖數量: {}", e);
-                    0
-                }
-            };
-
-            format!(
-                "### ℹ️ Bot 狀態\n\n- **貼圖數量**: {} 張\n- **管理員數量**: {} 人\n- **狀態**: 🟢 運行中",
-                sticker_count, admin_count
-            )
-        }
-        "reload" => {
-            // 重新載入配置
-            drop(app_state);
-            match handle_reload_config(state.clone()).await {
-                Ok(msg) => msg,
-                Err(e) => {
-                    error!("重新載入配置失敗: {}", e);
-                    format!("❌ 重新載入配置失敗: {}", e)
-                }
-            }
-        }
-        "sticker" | "stickers" | "貼圖" => {
-            // 顯示貼圖統計
-            drop(app_state);
-            handle_sticker_stats(state.clone()).await
-        }
-        _ => {
-            // 未知指令
-            drop(app_state);
-            format!("❓ 未知指令: `{}`\n\n輸入 `help` 查看可用指令。", command)
-        }
-    };
+    let response_message = handle_admin_command(command, state.clone()).await;
 
     // 重新獲取 app_state 來發送回應
     let app_state = state.read().await;
@@ -360,8 +305,43 @@ async fn handle_posted_event(data: &serde_json::Value, state: Arc<RwLock<AppStat
     Ok(())
 }
 
+/// 處理管理員命令（可在 DM 或 slash command 中使用）
+pub async fn handle_admin_command(command: &str, state: Arc<RwLock<AppState>>) -> String {
+    match command {
+        "" | "help" | "幫助" | "?" => get_help_message(),
+        "ping" => "🏓 Pong!".to_string(),
+        "status" | "狀態" => {
+            let app_state = state.read().await;
+            let sticker_db = app_state.sticker_database.clone();
+            let admin_count = app_state.config.admin.len();
+            drop(app_state);
+            let sticker_count = match sticker_db.count().await {
+                Ok(c) => c,
+                Err(e) => {
+                    warn!("無法取得貼圖數量: {}", e);
+                    0
+                }
+            };
+
+            format!(
+                "### ℹ️ Bot 狀態\n\n- **貼圖數量**: {} 張\n- **管理員數量**: {} 人\n- **狀態**: 🟢 運行中",
+                sticker_count, admin_count
+            )
+        }
+        "reload" => match handle_reload_config(state.clone()).await {
+            Ok(msg) => msg,
+            Err(e) => {
+                error!("重新載入配置失敗: {}", e);
+                format!("❌ 重新載入配置失敗: {}", e)
+            }
+        },
+        "sticker" | "stickers" | "貼圖" => handle_sticker_stats(state.clone()).await,
+        _ => format!("❓ 未知指令: `{}`\n\n輸入 `help` 查看可用指令。", command),
+    }
+}
+
 /// 生成 help 訊息
-fn get_help_message() -> String {
+pub fn get_help_message() -> String {
     r#"### 🤖 Bot 管理指令
 
 歡迎使用 Leko's Mattermost Bot 管理功能！
@@ -376,7 +356,8 @@ fn get_help_message() -> String {
 
 #### 提示：
 
-- 這些指令只能由管理員在 Direct Message 中使用
+- 這些指令只能由管理員使用
+- 可在 Direct Message 中使用，或透過 `/leko admin <指令>` 使用
 - `reload` 指令會重新讀取配置檔案，但不會影響 Mattermost 連線
 - 更多功能正在開發中...
 
@@ -441,7 +422,7 @@ async fn handle_reload_config(state: Arc<RwLock<AppState>>) -> Result<String> {
 }
 
 /// 處理貼圖統計資訊
-async fn handle_sticker_stats(state: Arc<RwLock<AppState>>) -> String {
+pub async fn handle_sticker_stats(state: Arc<RwLock<AppState>>) -> String {
     let app_state = state.read().await;
     let sticker_db = app_state.sticker_database.clone();
     drop(app_state);

@@ -6,6 +6,133 @@ use crate::mattermost::MattermostService;
 use chrono::Utc;
 use std::collections::HashMap;
 
+/// DialogElement builder helpers
+mod dialog_builders {
+    use super::*;
+
+    /// Create a text input element
+    pub fn text_element(
+        display_name: &str,
+        name: &str,
+        placeholder: Option<&str>,
+        optional: bool,
+        max_length: Option<usize>,
+    ) -> DialogElement {
+        DialogElement {
+            display_name: display_name.to_string(),
+            name: name.to_string(),
+            element_type: DialogElementType::Text,
+            placeholder: placeholder.map(|s| s.to_string()),
+            help_text: None,
+            optional,
+            min_length: if optional { None } else { Some(1) },
+            max_length,
+            data_source: None,
+            options: None,
+            default: None,
+            subtype: None,
+        }
+    }
+
+    /// Create a textarea element
+    pub fn textarea_element(
+        display_name: &str,
+        name: &str,
+        placeholder: Option<&str>,
+        help_text: Option<&str>,
+        optional: bool,
+        max_length: Option<usize>,
+    ) -> DialogElement {
+        DialogElement {
+            display_name: display_name.to_string(),
+            name: name.to_string(),
+            element_type: DialogElementType::Textarea,
+            placeholder: placeholder.map(|s| s.to_string()),
+            help_text: help_text.map(|s| s.to_string()),
+            optional,
+            min_length: None,
+            max_length,
+            data_source: None,
+            options: None,
+            default: None,
+            subtype: None,
+        }
+    }
+
+    /// Create a number input element
+    pub fn number_element(
+        display_name: &str,
+        name: &str,
+        placeholder: Option<&str>,
+        default: Option<&str>,
+        optional: bool,
+    ) -> DialogElement {
+        DialogElement {
+            display_name: display_name.to_string(),
+            name: name.to_string(),
+            element_type: DialogElementType::Text,
+            placeholder: placeholder.map(|s| s.to_string()),
+            help_text: None,
+            optional,
+            min_length: None,
+            max_length: Some(10),
+            data_source: None,
+            options: None,
+            default: default.map(|s| s.to_string()),
+            subtype: Some("number".to_string()),
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn test_text_element() {
+            let elem = text_element("測試", "test", Some("placeholder"), false, Some(100));
+            assert_eq!(elem.display_name, "測試");
+            assert_eq!(elem.name, "test");
+            assert_eq!(elem.element_type, DialogElementType::Text);
+            assert_eq!(elem.min_length, Some(1)); // 必填
+            assert_eq!(elem.max_length, Some(100));
+            assert!(!elem.optional);
+        }
+
+        #[test]
+        fn test_text_element_optional() {
+            let elem = text_element("測試", "test", None, true, None);
+            assert_eq!(elem.min_length, None); // 選填沒有最小長度
+            assert!(elem.optional);
+        }
+
+        #[test]
+        fn test_textarea_element() {
+            let elem = textarea_element(
+                "描述",
+                "desc",
+                Some("請輸入"),
+                Some("幫助文字"),
+                true,
+                Some(500),
+            );
+            assert_eq!(elem.element_type, DialogElementType::Textarea);
+            assert_eq!(elem.help_text, Some("幫助文字".to_string()));
+            assert_eq!(elem.max_length, Some(500));
+        }
+
+        #[test]
+        fn test_number_element() {
+            let elem = number_element("數量", "qty", Some("1"), Some("1"), false);
+            assert_eq!(elem.element_type, DialogElementType::Text);
+            assert_eq!(elem.subtype, Some("number".to_string()));
+            assert_eq!(elem.default, Some("1".to_string()));
+            assert_eq!(elem.max_length, Some(10));
+        }
+    }
+}
+
+use dialog_builders::{text_element, textarea_element, number_element};
+
 /// Parameters for opening the create dialog.
 pub struct CreateDialogParams<'a> {
     pub trigger_id: &'a str,
@@ -22,50 +149,29 @@ pub async fn open_create_dialog(
     params: &CreateDialogParams<'_>,
 ) -> Result<()> {
     let elements = vec![
-        DialogElement {
-            display_name: "商家名稱".to_string(),
-            name: "merchant_name".to_string(),
-            element_type: DialogElementType::Text,
-            placeholder: Some("例如：五十嵐".to_string()),
-            help_text: None,
-            optional: false,
-            min_length: Some(1),
-            max_length: Some(100),
-            data_source: None,
-            options: None,
-            default: None,
-            subtype: None,
-        },
-        DialogElement {
-            display_name: "描述".to_string(),
-            name: "description".to_string(),
-            element_type: DialogElementType::Textarea,
-            placeholder: Some("團購的詳細說明（可選）".to_string()),
-            help_text: None,
-            optional: true,
-            min_length: None,
-            max_length: Some(500),
-            data_source: None,
-            options: None,
-            default: None,
-            subtype: None,
-        },
-        DialogElement {
-            display_name: "其他資訊".to_string(),
-            name: "metadata".to_string(),
-            element_type: DialogElementType::Textarea,
-            placeholder: Some(
-                "YAML 格式，例如：\n截止時間: 2026-01-25 18:00\n取貨地點: 公司大廳".to_string(),
-            ),
-            help_text: Some("使用 YAML 格式填寫 key-value pairs（可選）".to_string()),
-            optional: true,
-            min_length: None,
-            max_length: Some(1000),
-            data_source: None,
-            options: None,
-            default: None,
-            subtype: None,
-        },
+        text_element(
+            "商家名稱",
+            "merchant_name",
+            Some("例如：五十嵐"),
+            false,
+            Some(100),
+        ),
+        textarea_element(
+            "描述",
+            "description",
+            Some("團購的詳細說明（可選）"),
+            None,
+            true,
+            Some(500),
+        ),
+        textarea_element(
+            "其他資訊",
+            "metadata",
+            Some("YAML 格式，例如：\n截止時間: 2026-01-25 18:00\n取貨地點: 公司大廳"),
+            Some("使用 YAML 格式填寫 key-value pairs（可選）"),
+            true,
+            Some(1000),
+        ),
     ];
 
     let state = serde_json::json!({
@@ -296,20 +402,17 @@ pub async fn open_edit_items_dialog(
     client: &dyn MattermostService,
     params: &EditItemsDialogParams<'_>,
 ) -> Result<()> {
-    let elements = vec![DialogElement {
-        display_name: "商品列表 (YAML 格式)".to_string(),
-        name: "items".to_string(),
-        element_type: DialogElementType::Textarea,
-        subtype: None,
-        placeholder: Some("商品名稱: 價格\n例：\n珍珠奶茶: 50\n紅茶拿鐵: 45".to_string()),
-        help_text: Some("每行一個商品，格式：商品名稱: 價格".to_string()),
-        default: Some(params.items_yaml.to_string()),
-        optional: false,
-        min_length: None,
-        max_length: Some(3000),
-        data_source: None,
-        options: None,
-    }];
+    let mut element = textarea_element(
+        "商品列表 (YAML 格式)",
+        "items",
+        Some("商品名稱: 價格\n例：\n珍珠奶茶: 50\n紅茶拿鐵: 45"),
+        Some("每行一個商品，格式：商品名稱: 價格"),
+        false,
+        Some(3000),
+    );
+    element.default = Some(params.items_yaml.to_string());
+    
+    let elements = vec![element];
 
     let state = serde_json::json!({
         "group_buy_id": params.group_buy_id,
@@ -674,20 +777,13 @@ pub async fn open_register_dialog(
             default: None,
             subtype: None,
         },
-        DialogElement {
-            display_name: "數量".to_string(),
-            name: "quantity".to_string(),
-            element_type: DialogElementType::Text,
-            placeholder: Some("1".to_string()),
-            help_text: None,
-            optional: false,
-            min_length: Some(1),
-            max_length: Some(10),
-            data_source: None,
-            options: None,
-            default: Some("1".to_string()),
-            subtype: Some("number".to_string()),
-        },
+        number_element(
+            "數量",
+            "quantity",
+            Some("1"),
+            Some("1"),
+            false,
+        ),
     ];
 
     let state = serde_json::json!({
@@ -897,20 +993,17 @@ pub async fn open_adjust_shortage_dialog(
         ));
     }
 
-    let elements = vec![DialogElement {
-        display_name: "調整數量 (YAML 格式)".to_string(),
-        name: "adjustments".to_string(),
-        element_type: DialogElementType::Textarea,
-        placeholder: Some("order_id: 新數量".to_string()),
-        help_text: Some("只需填寫要調整的訂單，格式：order_id: 新數量".to_string()),
-        optional: false,
-        min_length: None,
-        max_length: Some(3000),
-        data_source: None,
-        options: None,
-        default: Some(yaml),
-        subtype: None,
-    }];
+    let mut element = textarea_element(
+        "調整數量 (YAML 格式)",
+        "adjustments",
+        Some("order_id: 新數量"),
+        Some("只需填寫要調整的訂單，格式：order_id: 新數量"),
+        false,
+        Some(3000),
+    );
+    element.default = Some(yaml);
+    
+    let elements = vec![element];
 
     let state = serde_json::json!({
         "group_buy_id": params.group_buy_id,

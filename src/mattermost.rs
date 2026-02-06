@@ -587,7 +587,7 @@ pub struct DialogElement {
     pub subtype: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum DialogElementType {
     Text,

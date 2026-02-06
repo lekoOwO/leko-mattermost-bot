@@ -14,24 +14,24 @@ use crate::mattermost::Post;
 
 /// WebSocket 事件類型
 #[derive(Debug, Deserialize)]
-struct WebSocketEvent {
+pub struct WebSocketEvent {
     #[serde(rename = "event")]
     #[serde(default)]
-    event_type: Option<String>,
+    pub event_type: Option<String>,
     #[serde(default)]
-    data: serde_json::Value,
-    #[serde(default)]
-    #[allow(dead_code)]
-    broadcast: serde_json::Value,
+    pub data: serde_json::Value,
     #[serde(default)]
     #[allow(dead_code)]
-    seq: u64,
+    pub broadcast: serde_json::Value,
     #[serde(default)]
     #[allow(dead_code)]
-    status: Option<String>,
+    pub seq: u64,
     #[serde(default)]
     #[allow(dead_code)]
-    seq_reply: Option<u64>,
+    pub status: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub seq_reply: Option<u64>,
 }
 
 /// WebSocket 認證請求
@@ -48,35 +48,35 @@ struct AuthData {
 }
 
 /// Posted 事件資料
-#[derive(Debug, Deserialize)]
-struct PostedEventData {
+#[derive(Debug, Deserialize, Clone)]
+pub struct PostedEventData {
     #[serde(default)]
     #[allow(dead_code)]
-    channel_display_name: Option<String>,
+    pub channel_display_name: Option<String>,
     #[serde(default)]
     #[allow(dead_code)]
-    channel_name: Option<String>,
+    pub channel_name: Option<String>,
     #[serde(default)]
-    channel_type: Option<String>,
+    pub channel_type: Option<String>,
     #[serde(default)]
-    post: Option<String>,
+    pub post: Option<String>,
     #[serde(default)]
     #[allow(dead_code)]
-    sender_name: Option<String>,
+    pub sender_name: Option<String>,
 }
 
 /// Post 資料結構
-#[derive(Debug, Deserialize)]
-struct PostData {
+#[derive(Debug, Deserialize, Clone)]
+pub struct PostData {
     #[serde(default)]
     #[allow(dead_code)]
-    id: Option<String>,
+    pub id: Option<String>,
     #[serde(default)]
-    channel_id: Option<String>,
+    pub channel_id: Option<String>,
     #[serde(default)]
-    user_id: Option<String>,
+    pub user_id: Option<String>,
     #[serde(default)]
-    message: Option<String>,
+    pub message: Option<String>,
 }
 
 /// 啟動 WebSocket 客戶端
@@ -171,26 +171,37 @@ async fn connect_and_handle(
     Ok(())
 }
 
-async fn handle_websocket_message(text: &str, state: Arc<RwLock<AppState>>) -> Result<()> {
-    let event: WebSocketEvent = match serde_json::from_str(text) {
-        Ok(e) => e,
+/// 解析 WebSocket 事件（純函數，可測試）
+pub fn parse_websocket_event(text: &str) -> Result<Option<WebSocketEvent>> {
+    match serde_json::from_str(text) {
+        Ok(event) => Ok(Some(event)),
         Err(e) => {
-            // 解析失敗時記錄 debug 而非 error，因為可能有未知的事件類型
             debug!("無法解析 WebSocket 事件: {} - 訊息: {}", e, text);
-            return Ok(()); // 忽略無法解析的事件
+            Ok(None) // 忽略無法解析的事件
         }
-    };
+    }
+}
 
+/// 判斷事件類型（純函數，可測試）
+pub fn should_process_event(event: &WebSocketEvent) -> Option<String> {
     // 處理認證回應
-    if let Some(status) = &event.status
-        && status == "OK"
-    {
-        info!("WebSocket 認證成功");
-        return Ok(());
+    if let Some(status) = &event.status {
+        if status == "OK" {
+            info!("WebSocket 認證成功");
+            return None;
+        }
     }
 
     // 如果沒有 event_type，忽略
-    let Some(event_type) = &event.event_type else {
+    event.event_type.clone()
+}
+
+async fn handle_websocket_message(text: &str, state: Arc<RwLock<AppState>>) -> Result<()> {
+    let Some(event) = parse_websocket_event(text)? else {
+        return Ok(());
+    };
+
+    let Some(event_type) = should_process_event(&event) else {
         return Ok(());
     };
 
@@ -213,28 +224,50 @@ async fn handle_websocket_message(text: &str, state: Arc<RwLock<AppState>>) -> R
     Ok(())
 }
 
-async fn handle_posted_event(data: &serde_json::Value, state: Arc<RwLock<AppState>>) -> Result<()> {
-    // 解析事件資料
-    let event_data: PostedEventData =
-        serde_json::from_value(data.clone()).context("解析 posted 事件資料失敗")?;
-
+/// 解析 posted 事件資料（純函數，可測試）
+pub fn parse_posted_event_data(data: &serde_json::Value) -> Result<Option<PostedEventData>> {
+    let event_data: PostedEventData = serde_json::from_value(data.clone())
+        .context("解析 posted 事件資料失敗")?;
+    
     // 檢查是否為 Direct Message
     let channel_type = event_data.channel_type.as_deref().unwrap_or("");
     if channel_type != "D" {
-        return Ok(());
+        return Ok(None);
     }
+    
+    Ok(Some(event_data))
+}
 
-    // 解析 post 資料
+/// 解析 post 資料（純函數，可測試）
+pub fn parse_post_data(event_data: &PostedEventData) -> Result<Option<PostData>> {
     let post_json = event_data.post.as_deref().unwrap_or("{}");
-    let post: PostData = serde_json::from_str(post_json).context("解析 post 資料失敗")?;
-
+    let post: PostData = serde_json::from_str(post_json)
+        .context("解析 post 資料失敗")?;
+    
     let user_id = post.user_id.as_deref().unwrap_or("");
     let channel_id = post.channel_id.as_deref().unwrap_or("");
-    let message = post.message.as_deref().unwrap_or("").trim();
-
+    
     if user_id.is_empty() || channel_id.is_empty() {
-        return Ok(());
+        return Ok(None);
     }
+    
+    Ok(Some(post))
+}
+
+async fn handle_posted_event(data: &serde_json::Value, state: Arc<RwLock<AppState>>) -> Result<()> {
+    // 解析事件資料
+    let Some(event_data) = parse_posted_event_data(data)? else {
+        return Ok(());
+    };
+
+    // 解析 post 資料
+    let Some(post) = parse_post_data(&event_data)? else {
+        return Ok(());
+    };
+
+    let user_id = post.user_id.as_deref().unwrap();
+    let channel_id = post.channel_id.as_deref().unwrap();
+    let message = post.message.as_deref().unwrap_or("").trim();
 
     // 獲取 bot 自己的 user_id（避免回應自己的訊息）
     let app_state = state.read().await;
@@ -463,4 +496,114 @@ pub async fn handle_sticker_stats(state: Arc<RwLock<AppState>>) -> String {
     }
 
     message
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_parse_websocket_event_valid() {
+        let json = r#"{"event":"posted","data":{},"seq":1}"#;
+        let result = parse_websocket_event(json).unwrap();
+        assert!(result.is_some());
+        let event = result.unwrap();
+        assert_eq!(event.event_type, Some("posted".to_string()));
+    }
+
+    #[test]
+    fn test_parse_websocket_event_invalid() {
+        let json = r#"invalid json"#;
+        let result = parse_websocket_event(json).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_should_process_event_auth_ok() {
+        let event = WebSocketEvent {
+            event_type: None,
+            data: json!({}),
+            broadcast: json!({}),
+            seq: 1,
+            status: Some("OK".to_string()),
+            seq_reply: None,
+        };
+        let result = should_process_event(&event);
+        assert!(result.is_none()); // 認證成功事件不需處理
+    }
+
+    #[test]
+    fn test_should_process_event_posted() {
+        let event = WebSocketEvent {
+            event_type: Some("posted".to_string()),
+            data: json!({}),
+            broadcast: json!({}),
+            seq: 1,
+            status: None,
+            seq_reply: None,
+        };
+        let result = should_process_event(&event);
+        assert_eq!(result, Some("posted".to_string()));
+    }
+
+    #[test]
+    fn test_parse_posted_event_data_direct_message() {
+        let data = json!({
+            "channel_type": "D",
+            "post": r#"{"user_id":"user1","channel_id":"ch1","message":"test"}"#
+        });
+        let result = parse_posted_event_data(&data).unwrap();
+        assert!(result.is_some());
+        let event_data = result.unwrap();
+        assert_eq!(event_data.channel_type, Some("D".to_string()));
+    }
+
+    #[test]
+    fn test_parse_posted_event_data_not_dm() {
+        let data = json!({
+            "channel_type": "O",
+            "post": r#"{"user_id":"user1","channel_id":"ch1","message":"test"}"#
+        });
+        let result = parse_posted_event_data(&data).unwrap();
+        assert!(result.is_none()); // 不是 DM，應該回傳 None
+    }
+
+    #[test]
+    fn test_parse_post_data_valid() {
+        let event_data = PostedEventData {
+            channel_display_name: None,
+            channel_name: None,
+            channel_type: Some("D".to_string()),
+            post: Some(r#"{"user_id":"user1","channel_id":"ch1","message":"test"}"#.to_string()),
+            sender_name: None,
+        };
+        let result = parse_post_data(&event_data).unwrap();
+        assert!(result.is_some());
+        let post = result.unwrap();
+        assert_eq!(post.user_id, Some("user1".to_string()));
+        assert_eq!(post.channel_id, Some("ch1".to_string()));
+    }
+
+    #[test]
+    fn test_parse_post_data_empty_fields() {
+        let event_data = PostedEventData {
+            channel_display_name: None,
+            channel_name: None,
+            channel_type: Some("D".to_string()),
+            post: Some(r#"{"user_id":"","channel_id":"","message":""}"#.to_string()),
+            sender_name: None,
+        };
+        let result = parse_post_data(&event_data).unwrap();
+        assert!(result.is_none()); // user_id 或 channel_id 為空應回傳 None
+    }
+
+    #[test]
+    fn test_get_help_message() {
+        let help = get_help_message();
+        assert!(help.contains("Bot 管理指令"));
+        assert!(help.contains("help"));
+        assert!(help.contains("ping"));
+        assert!(help.contains("status"));
+    }
 }

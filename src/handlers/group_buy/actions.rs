@@ -640,7 +640,7 @@ async fn handle_shopping_list_action(
     // 計算統計資訊
     let num_items = shopping_list.len();
     let num_people: std::collections::HashSet<_> =
-        orders.iter().map(|o| o.buyer_id.clone()).collect();
+        orders.iter().map(|o| &o.buyer_id).collect();
 
     // 生成採購列表訊息（使用表格）
     let mut msg = "### 🛍️ 採購列表\n\n".to_string();

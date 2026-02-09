@@ -76,22 +76,20 @@ pub struct Attachment {
     pub actions: Option<Vec<Action>>,
 }
 
-/// Interactive Message Action
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Action {
     pub id: String,
     pub name: String,
     #[serde(rename = "type")]
-    pub action_type: String, // "button" or "select"
+    pub action_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub style: Option<String>, // "default", "primary", "success", "good", "warning", "danger"
+    pub style: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub integration: Option<Integration>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub options: Option<Vec<ActionOption>>,
 }
 
-/// Action Integration（指定 callback URL 和 context）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Integration {
     pub url: String,
@@ -180,12 +178,11 @@ pub struct Emoji {
     pub creator_id: Option<String>,
 }
 
-/// Channel 資訊
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Channel {
     pub id: String,
     #[serde(rename = "type")]
-    pub channel_type: String, // "D" for direct, "O" for public, "P" for private
+    pub channel_type: String,
     #[serde(default)]
     pub display_name: Option<String>,
     #[serde(default)]
@@ -193,7 +190,6 @@ pub struct Channel {
 }
 
 impl MattermostClient {
-    /// 建立新的 Mattermost 客戶端
     pub fn new(base_url: String, bot_token: String) -> Result<Self> {
         let mut headers = header::HeaderMap::new();
         headers.insert(

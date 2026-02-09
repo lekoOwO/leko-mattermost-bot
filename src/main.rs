@@ -104,7 +104,6 @@ async fn main() -> Result<()> {
 
     info!("Bot 使用者: {} ({})", bot_user.username, bot_user_id);
 
-    // 解析 default_avatar 的 @username 為 user_id
     let mut config = config;
     if config.needs_avatar_resolution() {
         if let Some(username) = config.get_avatar_username() {
@@ -122,7 +121,6 @@ async fn main() -> Result<()> {
         }
     }
 
-    // Emoji 格式 (:emoji:) 不需要解析，直接使用 icon_emoji 參數即可
     if let Some(emoji) = config.default_avatar_emoji() {
         info!("使用預設頭像 emoji: {}", emoji);
     } else if let Some(url) = config.default_avatar_url() {
@@ -176,7 +174,6 @@ async fn main() -> Result<()> {
 }
 
 async fn start_server(state: Arc<RwLock<AppState>>, addr: &str) -> Result<()> {
-    // Slash command 路由
     let sticker_command = warp::post()
         .and(warp::path("sticker"))
         .and(warp::path::end())
@@ -184,7 +181,6 @@ async fn start_server(state: Arc<RwLock<AppState>>, addr: &str) -> Result<()> {
         .and(with_state(state.clone()))
         .and_then(handle_sticker_command);
 
-    // /leko slash command 路由
     let leko_command = warp::post()
         .and(warp::path("leko"))
         .and(warp::path::end())
@@ -192,7 +188,6 @@ async fn start_server(state: Arc<RwLock<AppState>>, addr: &str) -> Result<()> {
         .and(with_state(state.clone()))
         .and_then(handle_leko_command);
 
-    // /group_buy slash command 路由
     let group_buy_command = warp::post()
         .and(warp::path("group_buy"))
         .and(warp::path::end())
@@ -200,7 +195,6 @@ async fn start_server(state: Arc<RwLock<AppState>>, addr: &str) -> Result<()> {
         .and(with_state(state.clone()))
         .and_then(handle_group_buy_command);
 
-    // 團購 Dialog 處理路由
     let group_buy_dialog_create = warp::post()
         .and(warp::path("api"))
         .and(warp::path("v1"))
@@ -215,7 +209,6 @@ async fn start_server(state: Arc<RwLock<AppState>>, addr: &str) -> Result<()> {
         .and_then(
             |content_type: Option<String>, body: warp::hyper::body::Bytes, state| async move {
                 info!("收到 dialog 請求，Content-Type: {:?}", content_type);
-                // 將 bytes 解析為 form data
                 let body_str = String::from_utf8_lossy(&body);
                 info!("Body: {}", &body_str[..body_str.len().min(200)]);
 
@@ -299,22 +292,19 @@ async fn start_server(state: Arc<RwLock<AppState>>, addr: &str) -> Result<()> {
             handle_adjust_shortage_dialog(form, state).await
         });
 
-    // 團購按鈕 Action 處理路由
     let group_buy_action = warp::post()
         .and(warp::path("api"))
         .and(warp::path("v1"))
         .and(warp::path("group_buy"))
         .and(warp::path("action"))
-        .and(warp::path::param::<String>()) // 捕獲 action 名稱（如 edit_items, register 等）
+        .and(warp::path::param::<String>())
         .and(warp::path::end())
         .and(warp::body::json())
         .and(with_state(state.clone()))
         .and_then(|_action_name: String, action_req, state| {
-            // action_name 不使用，因為 handle_group_buy_action 會從 action_req.context.action 中取得
             handle_group_buy_action(action_req, state)
         });
 
-    // Interactive Message Action 處理器
     let action_handler = warp::post()
         .and(warp::path("action"))
         .and(warp::path::end())
@@ -322,13 +312,11 @@ async fn start_server(state: Arc<RwLock<AppState>>, addr: &str) -> Result<()> {
         .and(with_state(state.clone()))
         .and_then(handle_action);
 
-    // 健康檢查端點
     let health = warp::get()
         .and(warp::path("health"))
         .and(warp::path::end())
         .map(|| warp::reply::json(&serde_json::json!({"status": "ok"})));
 
-    // 加上請求日誌中間件
     let log = warp::log::custom(|info| {
         info!(
             "{} {} {} - {}",

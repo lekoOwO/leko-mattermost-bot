@@ -24,9 +24,9 @@ pub struct MattermostConfig {
     #[serde(default)]
     pub slash_command_tokens: SlashCommandTokens,
     #[serde(default)]
-    pub bot_callback_url: Option<String>, // Bot 服務器的公開 URL，用於 dialog callback
+    pub bot_callback_url: Option<String>,
     #[serde(default)]
-    pub default_avatar: Option<String>, // 默認頭像，可以是 URL、#user_id、@username 或 :emoji: 格式
+    pub default_avatar: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -98,10 +98,8 @@ impl Config {
     pub fn is_admin(&self, user_id: &str, username: &str) -> bool {
         self.admin.iter().any(|admin| {
             if let Some(admin_username) = admin.strip_prefix('@') {
-                // @開頭的比對 username
                 admin_username == username
             } else {
-                // 否則比對 user_id
                 admin == user_id
             }
         })
@@ -112,41 +110,22 @@ impl Config {
         s.starts_with(':') && s.ends_with(':') && s.len() > 2
     }
 
-    /// 獲取預設頭像 URL（已解析）
+    /// 獲取預設頭像 URL
     /// 
-    /// 如果配置了 default_avatar:
-    /// - 若為普通 URL，直接返回
-    /// - 若為 #user_id 格式，會轉換為 Mattermost 用戶頭像 API URL
-    /// - 若為 :emoji: 格式，返回 None（應使用 default_avatar_emoji）
-    /// 
-    /// # 注意
-    /// - 使用 #user_id 格式可直接指定用戶 ID
-    /// - @username 格式應在啟動時解析為 #user_id
-    /// - :emoji: 格式不需要解析，直接使用 icon_emoji 參數即可
-    /// 
-    /// # 返回值
-    /// - `Some(url)` - 解析後的完整 URL
-    /// - `None` - 未配置預設頭像或為 emoji 格式
+    /// 返回 URL 或 #user_id 格式，emoji 格式返回 None
     pub fn default_avatar_url(&self) -> Option<String> {
         self.mattermost.default_avatar.as_ref().and_then(|avatar| {
             if Self::is_emoji_format(avatar) {
-                // :emoji: 格式，返回 None，應使用 default_avatar_emoji
                 None
             } else if let Some(user_id) = avatar.strip_prefix('#') {
-                // #user_id 格式，轉換為 Mattermost API URL
                 Some(format!("{}/api/v4/users/{}/image", self.mattermost.url, user_id))
             } else {
-                // 普通 URL
                 Some(avatar.clone())
             }
         })
     }
 
-    /// 獲取預設頭像 emoji（:emoji: 格式）
-    /// 
-    /// # 返回值
-    /// - `Some(emoji)` - 包含冒號的完整 emoji 格式，如 ":troll:"
-    /// - `None` - 未配置預設頭像或不是 emoji 格式
+    /// 獲取預設頭像 emoji
     pub fn default_avatar_emoji(&self) -> Option<String> {
         self.mattermost.default_avatar.as_ref().and_then(|avatar| {
             if Self::is_emoji_format(avatar) {
@@ -165,14 +144,12 @@ impl Config {
             .unwrap_or(false)
     }
 
-    /// 取得需要解析的 username（不含 @ 前綴）
     pub fn get_avatar_username(&self) -> Option<String> {
         self.mattermost.default_avatar
             .as_ref()
             .and_then(|s| s.strip_prefix('@').map(|u| u.to_string()))
     }
 
-    /// 設定已解析的頭像 user_id（替換為 #user_id 格式）
     pub fn set_resolved_avatar(&mut self, user_id: String) {
         self.mattermost.default_avatar = Some(format!("#{}", user_id));
     }

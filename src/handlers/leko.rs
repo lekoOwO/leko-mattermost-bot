@@ -12,7 +12,6 @@ use super::sticker::handle_sticker_command_impl;
 use crate::websocket;
 use crate::AppState;
 
-/// 處理 /leko slash command
 pub async fn handle_leko_command(
     form: std::collections::HashMap<String, String>,
     state: Arc<RwLock<AppState>>,
@@ -21,7 +20,6 @@ pub async fn handle_leko_command(
     info!("請求參數: {:?}", form.keys().collect::<Vec<_>>());
     info!("完整表單內容: {:?}", form);
 
-    // 驗證 slash command token
     verify_slash_command_token(&form, &state, "leko").await?;
 
     let text = get_form_field(&form, "text");
@@ -52,7 +50,6 @@ pub async fn handle_leko_command(
     }
 }
 
-/// 顯示使用說明
 async fn handle_leko_help(state: Arc<RwLock<AppState>>) -> warp::reply::Json {
     info!("顯示 /leko 使用說明");
     
@@ -79,7 +76,6 @@ async fn handle_leko_help(state: Arc<RwLock<AppState>>) -> warp::reply::Json {
     warp::reply::json(&response)
 }
 
-/// 處理 /leko admin 子指令
 async fn handle_admin_subcommand(
     parts: &[&str],
     form: std::collections::HashMap<String, String>,
@@ -125,12 +121,6 @@ async fn handle_admin_subcommand(
 
 #[cfg(test)]
 mod tests {
-    // 注意：handle_leko_help 現在是 async 函數，需要使用 async runtime 來測試
-    // #[tokio::test]
-    // async fn test_handle_leko_help() {
-    //     // 需要建立一個測試用的 AppState
-    // }
-
     #[test]
     fn test_parse_subcommand() {
         let test_cases = vec![

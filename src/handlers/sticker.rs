@@ -23,7 +23,6 @@ pub async fn handle_sticker_command(
     handle_sticker_command_impl(form, state).await
 }
 
-/// 處理貼圖指令的實際邏輯（可被 /sticker 和 /leko sticker 共用）
 pub async fn handle_sticker_command_impl(
     form: std::collections::HashMap<String, String>,
     state: Arc<RwLock<AppState>>,
@@ -149,7 +148,6 @@ pub async fn handle_sticker_command_impl(
             "已建立 Interactive Message，共 {} 個貼圖選項",
             stickers_count
         );
-        // 回傳空回應
         Ok(empty_json_reply())
     } else {
         error!("response_url 為空");

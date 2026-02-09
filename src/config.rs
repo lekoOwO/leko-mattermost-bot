@@ -107,28 +107,52 @@ impl Config {
         })
     }
 
+    /// 檢查字串是否為 emoji 格式（:emoji:）
+    fn is_emoji_format(s: &str) -> bool {
+        s.starts_with(':') && s.ends_with(':') && s.len() > 2
+    }
+
     /// 獲取預設頭像 URL（已解析）
     /// 
     /// 如果配置了 default_avatar:
     /// - 若為普通 URL，直接返回
     /// - 若為 #user_id 格式，會轉換為 Mattermost 用戶頭像 API URL
+    /// - 若為 :emoji: 格式，返回 None（應使用 default_avatar_emoji）
     /// 
     /// # 注意
     /// - 使用 #user_id 格式可直接指定用戶 ID
     /// - @username 格式應在啟動時解析為 #user_id
-    /// - :emoji: 格式應在啟動時解析為 emoji URL
+    /// - :emoji: 格式不需要解析，直接使用 icon_emoji 參數即可
     /// 
     /// # 返回值
     /// - `Some(url)` - 解析後的完整 URL
-    /// - `None` - 未配置預設頭像
+    /// - `None` - 未配置預設頭像或為 emoji 格式
     pub fn default_avatar_url(&self) -> Option<String> {
-        self.mattermost.default_avatar.as_ref().map(|avatar| {
-            if let Some(user_id) = avatar.strip_prefix('#') {
+        self.mattermost.default_avatar.as_ref().and_then(|avatar| {
+            if Self::is_emoji_format(avatar) {
+                // :emoji: 格式，返回 None，應使用 default_avatar_emoji
+                None
+            } else if let Some(user_id) = avatar.strip_prefix('#') {
                 // #user_id 格式，轉換為 Mattermost API URL
-                format!("{}/api/v4/users/{}/image", self.mattermost.url, user_id)
+                Some(format!("{}/api/v4/users/{}/image", self.mattermost.url, user_id))
             } else {
-                // 普通 URL（@username 和 :emoji: 應該在啟動時就已經被解析了）
-                avatar.clone()
+                // 普通 URL
+                Some(avatar.clone())
+            }
+        })
+    }
+
+    /// 獲取預設頭像 emoji（:emoji: 格式）
+    /// 
+    /// # 返回值
+    /// - `Some(emoji)` - 包含冒號的完整 emoji 格式，如 ":troll:"
+    /// - `None` - 未配置預設頭像或不是 emoji 格式
+    pub fn default_avatar_emoji(&self) -> Option<String> {
+        self.mattermost.default_avatar.as_ref().and_then(|avatar| {
+            if Self::is_emoji_format(avatar) {
+                Some(avatar.clone())
+            } else {
+                None
             }
         })
     }
@@ -141,14 +165,6 @@ impl Config {
             .unwrap_or(false)
     }
 
-    /// 檢查是否需要解析 emoji（:emoji: 格式）
-    pub fn needs_emoji_resolution(&self) -> bool {
-        self.mattermost.default_avatar
-            .as_ref()
-            .map(|s| s.starts_with(':') && s.ends_with(':') && s.len() > 2)
-            .unwrap_or(false)
-    }
-
     /// 取得需要解析的 username（不含 @ 前綴）
     pub fn get_avatar_username(&self) -> Option<String> {
         self.mattermost.default_avatar
@@ -156,27 +172,9 @@ impl Config {
             .and_then(|s| s.strip_prefix('@').map(|u| u.to_string()))
     }
 
-    /// 取得需要解析的 emoji 名稱（不含 : 前綴和後綴）
-    pub fn get_avatar_emoji_name(&self) -> Option<String> {
-        self.mattermost.default_avatar
-            .as_ref()
-            .and_then(|s| {
-                if s.starts_with(':') && s.ends_with(':') && s.len() > 2 {
-                    Some(s[1..s.len()-1].to_string())
-                } else {
-                    None
-                }
-            })
-    }
-
     /// 設定已解析的頭像 user_id（替換為 #user_id 格式）
     pub fn set_resolved_avatar(&mut self, user_id: String) {
         self.mattermost.default_avatar = Some(format!("#{}", user_id));
-    }
-
-    /// 設定已解析的 emoji URL（替換為完整 URL）
-    pub fn set_resolved_emoji(&mut self, emoji_id: String) {
-        self.mattermost.default_avatar = Some(format!("{}/api/v4/emoji/{}/image", self.mattermost.url, emoji_id));
     }
 }
 
@@ -298,18 +296,11 @@ stickers:
   categories: []
 "#;
         fs::write(&config_path, yaml_content).unwrap();
-        let mut config = Config::from_path(&config_path).unwrap();
-        assert!(config.needs_emoji_resolution());
+        let config = Config::from_path(&config_path).unwrap();
+        // emoji 格式應該返回 None 給 URL，並通過 default_avatar_emoji 返回
+        assert_eq!(config.default_avatar_url(), None);
+        assert_eq!(config.default_avatar_emoji(), Some(":troll:".to_string()));
         assert!(!config.needs_avatar_resolution());
-        assert_eq!(config.get_avatar_emoji_name(), Some("troll".to_string()));
-        
-        // 測試解析後的結果
-        config.set_resolved_emoji("emoji123".to_string());
-        assert_eq!(
-            config.default_avatar_url(),
-            Some("https://mattermost.example.com/api/v4/emoji/emoji123/image".to_string())
-        );
-        assert!(!config.needs_emoji_resolution());
     }
 
     #[test]

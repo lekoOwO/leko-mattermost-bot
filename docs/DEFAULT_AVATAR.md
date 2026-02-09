@@ -83,27 +83,22 @@ mattermost:
   default_avatar: ":troll:"
 ```
 
-程式啟動時會自動查詢該 emoji 對應的 ID，並將配置解析為完整的 emoji 圖片 URL。
+**程式會直接使用 `icon_emoji` 參數，無需在啟動時解析。**
 
-程式會自動將其轉換為：
-```
-https://your-mattermost-url/api/v4/emoji/{emoji_id}/image
-```
+Mattermost 會自動將 emoji 名稱轉換為對應的圖示顯示。
 
 **優點**：
+- ✅ **無需啟動時 API 查詢** - 直接使用 `icon_emoji` 參數，啟動速度快
 - 使用 Mattermost 內建或自訂的 emoji
 - 易於維護和更換（只需修改 emoji 名稱）
 - emoji 與 Mattermost 主題一致
-
-**缺點**：
-- 啟動時需要額外的 API 查詢
-- 如果 emoji 不存在，會記錄錯誤但不中斷啟動
-- 僅限於 Mattermost 中已存在的 emoji
+- 如果 emoji 不存在，Mattermost 會自動 fallback 到預設顯示
 
 **適用場景**：
 - 想使用 Mattermost 自訂 emoji 作為頭像
 - 團隊有統一的 emoji 風格
 - 需要經常更換頭像（修改 emoji 名稱即可）
+- **推薦**：相較於其他需要解析的格式，emoji 格式最簡單高效
 
 ## 範例配置
 
@@ -141,23 +136,40 @@ mattermost:
 2. **檢查是否需要解析 username** - `config.needs_avatar_resolution()` 檢查是否為 `@username` 格式
 3. **解析用戶名稱**（若需要）- 呼叫 `mattermost_client.get_user_by_username(username)` 查詢 user_id
 4. **更新配置為 #user_id** - `config.set_resolved_avatar(user_id)` 將 `@username` 替換為 `#user_id`
-5. **檢查是否需要解析 emoji** - `config.needs_emoji_resolution()` 檢查是否為 `:emoji:` 格式
-6. **解析 emoji**（若需要）- 呼叫 `mattermost_client.get_emoji_by_name(emoji_name)` 查詢 emoji_id
-7. **更新配置為 emoji URL** - `config.set_resolved_emoji(emoji_id)` 將 `:emoji:` 替換為完整 URL
-8. **使用時轉換** - `config.default_avatar_url()` 將 `#user_id` 轉換為完整的頭像 API URL
+5. **Emoji 格式直接使用** - `:emoji:` 格式無需解析，直接通過 `config.default_avatar_emoji()` 取得並使用 `icon_emoji` 參數
+6. **使用時轉換** - `config.default_avatar_url()` 將 `#user_id` 轉換為完整的頭像 API URL，emoji 格式則返回 `None`
+
+### 圖示參數使用
+
+程式使用 `IconConfig` enum 來統一處理不同類型的頭像：
+
+```rust
+pub enum IconConfig {
+    Url(String),    // 使用 icon_url 參數
+    Emoji(String),  // 使用 icon_emoji 參數
+}
+```
+
+- **URL 格式**（包括完整 URL、`#user_id`）→ 使用 `icon_url` 參數
+- **Emoji 格式**（`:emoji:`）→ 使用 `icon_emoji` 參數
 
 ### 相關程式碼位置
 
 - `src/config.rs` - `MattermostConfig::default_avatar` 欄位及相關方法
-- `src/main.rs` - 啟動時的用戶名稱和 emoji 解析邏輯
-- `src/mattermost.rs` - `get_user_by_username()` 和 `get_emoji_by_name()` API 方法
+  - `default_avatar_url()` - 返回 URL 格式的頭像（emoji 格式返回 None）
+  - `default_avatar_emoji()` - 返回 emoji 格式的頭像
+- `src/handlers/reply_helpers.rs` - `IconConfig` enum 和相關 helper 函數
+- `src/main.rs` - 啟動時的用戶名稱解析邏輯（emoji 無需解析）
+- `src/mattermost.rs` - `get_user_by_username()` API 方法
 
 ## 使用建議
 
-1. **生產環境**：建議使用完整 URL 或 `#user_id` 格式，避免啟動時的額外 API 查詢
+1. **生產環境**：
+   - **首選**：`:emoji:` 格式 - 簡單高效，無需啟動時查詢
+   - **次選**：完整 URL 或 `#user_id` 格式 - 適合需要使用特定圖片的場景
 2. **開發/測試環境**：可使用 `@username` 或 `:emoji:` 格式，提高配置的可讀性
 3. **配置管理**：如果使用版本控制管理配置，`@username` 或 `:emoji:` 格式更容易審查和理解
-4. **Emoji 頭像**：如果想使用與團隊風格一致的頭像，`:emoji:` 是不錯的選擇
+4. **Emoji 頭像**：如果想使用與團隊風格一致的頭像，`:emoji:` 是**最佳選擇**
 
 ## 錯誤處理
 
@@ -166,12 +178,12 @@ mattermost:
 - 不會中斷程式啟動
 - 頭像配置會保持為未解析的 `@username`，可能導致頭像顯示異常
 
-### :emoji: 解析失敗
-- 程式會記錄錯誤訊息到日誌
-- 不會中斷程式啟動
-- 頭像配置會保持為未解析的 `:emoji:`，可能導致頭像顯示異常
+### :emoji: 不存在
+- Mattermost 會自動處理不存在的 emoji
+- 顯示為 emoji 名稱文字（如 `:unknown_emoji:`）
+- 不會影響程式運行
 
-建議在生產環境檢查日誌確保解析成功。
+建議在生產環境檢查日誌確保解析成功（僅 `@username` 格式需要）。
 
 ## 相關訊息
 

@@ -3,19 +3,53 @@
 use std::collections::HashMap;
 use warp::http::StatusCode;
 
+/// 頭像配置，支援 URL 或 emoji 格式
+#[derive(Debug, Clone)]
+pub enum IconConfig {
+    /// 使用 URL 作為頭像
+    Url(String),
+    /// 使用 emoji 作為頭像（格式：":emoji:"）
+    Emoji(String),
+}
+
+impl IconConfig {
+    /// 從 Config 獲取圖示配置
+    pub fn from_config(config: &crate::config::Config) -> Option<Self> {
+        if let Some(emoji) = config.default_avatar_emoji() {
+            Some(IconConfig::Emoji(emoji))
+        } else if let Some(url) = config.default_avatar_url() {
+            Some(IconConfig::Url(url))
+        } else {
+            None
+        }
+    }
+
+    /// 將圖示配置應用到 JSON 物件
+    fn apply_to_json(&self, response: &mut serde_json::Value) {
+        match self {
+            IconConfig::Url(url) => {
+                response["icon_url"] = serde_json::json!(url);
+            }
+            IconConfig::Emoji(emoji) => {
+                response["icon_emoji"] = serde_json::json!(emoji);
+            }
+        }
+    }
+}
+
 /// 建立 ephemeral 類型的 JSON 回應（僅使用者可見）
 /// 
 /// # 參數
 /// - `text`: 回應訊息內容
-/// - `icon_url`: 可選的頭像 URL
-pub fn ephemeral_json_reply(text: impl Into<String>, icon_url: Option<String>) -> warp::reply::Json {
+/// - `icon`: 可選的頭像配置（URL 或 emoji）
+pub fn ephemeral_json_reply(text: impl Into<String>, icon: Option<IconConfig>) -> warp::reply::Json {
     let mut response = serde_json::json!({
         "response_type": "ephemeral",
         "text": text.into()
     });
     
-    if let Some(url) = icon_url {
-        response["icon_url"] = serde_json::json!(url);
+    if let Some(icon_config) = icon {
+        icon_config.apply_to_json(&mut response);
     }
     
     warp::reply::json(&response)
@@ -25,30 +59,30 @@ pub fn ephemeral_json_reply(text: impl Into<String>, icon_url: Option<String>) -
 /// 
 /// # 參數
 /// - `text`: 回應訊息內容
-/// - `icon_url`: 可選的頭像 URL
+/// - `icon`: 可選的頭像配置（URL 或 emoji）
 pub fn ephemeral_json_with_status(
     text: impl Into<String>,
-    icon_url: Option<String>,
+    icon: Option<IconConfig>,
 ) -> warp::reply::WithStatus<warp::reply::Json> {
-    warp::reply::with_status(ephemeral_json_reply(text, icon_url), StatusCode::OK)
+    warp::reply::with_status(ephemeral_json_reply(text, icon), StatusCode::OK)
 }
 
 /// 建立 in_channel 類型的 JSON 回應（所有人可見）
 /// 
 /// # 參數
 /// - `text`: 回應訊息內容
-/// - `icon_url`: 可選的頭像 URL
+/// - `icon`: 可選的頭像配置（URL 或 emoji）
 pub fn in_channel_json_reply(
     text: impl Into<String>,
-    icon_url: Option<String>,
+    icon: Option<IconConfig>,
 ) -> warp::reply::Json {
     let mut response = serde_json::json!({
         "response_type": "in_channel",
         "text": text.into()
     });
     
-    if let Some(url) = icon_url {
-        response["icon_url"] = serde_json::json!(url);
+    if let Some(icon_config) = icon {
+        icon_config.apply_to_json(&mut response);
     }
     
     warp::reply::json(&response)
